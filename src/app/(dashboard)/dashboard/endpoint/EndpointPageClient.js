@@ -762,7 +762,12 @@ export default function APIPageClient({ machineId }) {
       const payload = { name: newKeyName };
       const limitNum = parseInt(newKeyTokenLimit, 10);
       if (Number.isFinite(limitNum) && limitNum > 0) payload.tokenLimit = limitNum;
-      if (newKeyExpiresAt) payload.expiresAt = new Date(newKeyExpiresAt).toISOString();
+      // newKeyExpiresAt is a date-only value ("YYYY-MM-DD"); expire at the end
+      // of that day in local time so the key stays valid through the whole date.
+      if (newKeyExpiresAt) {
+        const [y, m, d] = newKeyExpiresAt.split("-").map(Number);
+        payload.expiresAt = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
+      }
 
       const res = await fetch("/api/keys", {
         method: "POST",
@@ -1215,7 +1220,7 @@ export default function APIPageClient({ machineId }) {
                         >
                           {Date.now() >= new Date(key.expiresAt).getTime()
                             ? `Expired ${new Date(key.expiresAt).toLocaleDateString()}`
-                            : `Expires ${new Date(key.expiresAt).toLocaleString()}`}
+                            : `Expires ${new Date(key.expiresAt).toLocaleDateString()}`}
                         </span>
                       ) : null}
                     </div>
@@ -1447,7 +1452,7 @@ export default function APIPageClient({ machineId }) {
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-text-main">Expires At (optional)</label>
             <input
-              type="datetime-local"
+              type="date"
               value={newKeyExpiresAt}
               onChange={(e) => setNewKeyExpiresAt(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-border bg-surface-1 text-text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"

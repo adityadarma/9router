@@ -1,3 +1,13 @@
+# v0.5.10 (2026-06-24)
+
+## Features
+- **API keys**: per-key token limit and expiry. When creating a key you can optionally set a max token budget (prompt + completion) and an expiration date/time. Keys without either setting behave exactly as before (unrestricted).
+  - Requests are rejected with a clear error when a key is expired (`401`) or has reached its token limit (`403`).
+  - Limits are enforced even when `requireApiKey` is off — but only for known keys that have a limit/expiry configured, so unrestricted and unknown keys keep passing through as before.
+  - Dashboard → Endpoint → API Keys shows live usage (`used / limit`) and expiry, highlighted when exceeded.
+- **CI**: GitHub Actions workflow that builds, lints, and runs the unit test subset on every push to the `limit-token` branch and on pull requests.
+- **Docker**: build-and-push workflow now targets GHCR and runs on manual dispatch or `v*` tags.
+
 # v0.5.8 (2026-06-21)
 
 ## Features
