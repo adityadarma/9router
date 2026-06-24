@@ -1,4 +1,4 @@
-import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings } from "@/lib/localDb";
+import { getProviderConnections, validateApiKey, validateApiKeyDetailed, getApiKeyByKey, keyLimitReason, updateProviderConnection, getSettings } from "@/lib/localDb";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
@@ -309,4 +309,29 @@ export function extractApiKey(request) {
 export async function isValidApiKey(apiKey) {
   if (!apiKey) return false;
   return await validateApiKey(apiKey);
+}
+
+/**
+ * Validate API key with reason (limit-token feature).
+ * Returns { valid, reason } where reason is one of:
+ * "invalid" | "inactive" | "expired" | "limit" | null
+ */
+export async function checkApiKey(apiKey) {
+  if (!apiKey) return { valid: false, reason: "invalid" };
+  const { valid, reason } = await validateApiKeyDetailed(apiKey);
+  return { valid, reason };
+}
+
+/**
+ * Limit-token check ONLY. Used when requireApiKey is OFF: an unknown or
+ * paused key must still pass through exactly like before — we only block
+ * when a known key has a *configured* expiry/token-limit that's exceeded.
+ * Returns { ok, reason } where reason is "expired" | "limit" | null.
+ */
+export async function checkApiKeyLimits(apiKey) {
+  if (!apiKey) return { ok: true, reason: null };
+  const key = await getApiKeyByKey(apiKey);
+  if (!key) return { ok: true, reason: null }; // unknown key → free pass (as before)
+  const reason = keyLimitReason(key);
+  return { ok: !reason, reason };
 }

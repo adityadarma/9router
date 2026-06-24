@@ -79,6 +79,13 @@ export const TABLES = {
       machineId: "TEXT",
       isActive: "INTEGER DEFAULT 1",
       createdAt: "TEXT NOT NULL",
+      // Limit-token feature: optional usage cap & expiry per key.
+      // tokenLimit: max total tokens (prompt+completion) allowed; NULL/0 = unlimited.
+      // expiresAt: ISO timestamp when key stops working; NULL = never expires.
+      // tokensUsed: running total of tokens consumed by this key.
+      tokenLimit: "INTEGER",
+      expiresAt: "TEXT",
+      tokensUsed: "INTEGER DEFAULT 0",
     },
     indexes: ["CREATE INDEX IF NOT EXISTS idx_ak_key ON apiKeys(key)"],
   },

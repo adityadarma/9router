@@ -281,6 +281,20 @@ export async function saveRequestUsage(entry) {
 
     pushToRing(entry);
     statsEmitter.emit("update");
+
+    // Limit-token: accrue consumed tokens against the API key's running total.
+    // Done outside the usage transaction (different table, best-effort).
+    if (entry.apiKey && typeof entry.apiKey === "string") {
+      const totalTokens = (promptTokens || 0) + (completionTokens || 0);
+      if (totalTokens > 0) {
+        try {
+          const { addTokensUsedByKey } = await import("./apiKeysRepo.js");
+          await addTokensUsedByKey(entry.apiKey, totalTokens);
+        } catch (e) {
+          console.error("Failed to accrue API key token usage:", e);
+        }
+      }
+    }
   } catch (e) {
     console.error("Failed to save usage stats:", e);
   }

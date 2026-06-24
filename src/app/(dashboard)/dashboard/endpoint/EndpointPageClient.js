@@ -26,6 +26,8 @@ export default function APIPageClient({ machineId }) {
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyTokenLimit, setNewKeyTokenLimit] = useState("");
+  const [newKeyExpiresAt, setNewKeyExpiresAt] = useState("");
   const [createdKey, setCreatedKey] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
 
@@ -757,10 +759,15 @@ export default function APIPageClient({ machineId }) {
     if (!newKeyName.trim()) return;
 
     try {
+      const payload = { name: newKeyName };
+      const limitNum = parseInt(newKeyTokenLimit, 10);
+      if (Number.isFinite(limitNum) && limitNum > 0) payload.tokenLimit = limitNum;
+      if (newKeyExpiresAt) payload.expiresAt = new Date(newKeyExpiresAt).toISOString();
+
       const res = await fetch("/api/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newKeyName }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
 
@@ -768,6 +775,8 @@ export default function APIPageClient({ machineId }) {
         setCreatedKey(data.key);
         await fetchData();
         setNewKeyName("");
+        setNewKeyTokenLimit("");
+        setNewKeyExpiresAt("");
         setShowAddModal(false);
       }
     } catch (error) {
@@ -1183,6 +1192,34 @@ export default function APIPageClient({ machineId }) {
                   <p className="text-xs text-text-muted mt-1">
                     Created {new Date(key.createdAt).toLocaleDateString()}
                   </p>
+                  {(key.tokenLimit || key.expiresAt) && (
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                      {key.tokenLimit ? (
+                        <span
+                          className={`text-xs ${
+                            (key.tokensUsed || 0) >= key.tokenLimit
+                              ? "text-red-500 font-medium"
+                              : "text-text-muted"
+                          }`}
+                        >
+                          {(key.tokensUsed || 0).toLocaleString()} / {key.tokenLimit.toLocaleString()} tokens
+                        </span>
+                      ) : null}
+                      {key.expiresAt ? (
+                        <span
+                          className={`text-xs ${
+                            Date.now() >= new Date(key.expiresAt).getTime()
+                              ? "text-red-500 font-medium"
+                              : "text-text-muted"
+                          }`}
+                        >
+                          {Date.now() >= new Date(key.expiresAt).getTime()
+                            ? `Expired ${new Date(key.expiresAt).toLocaleDateString()}`
+                            : `Expires ${new Date(key.expiresAt).toLocaleString()}`}
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                   {key.isActive === false && (
                     <p className="text-xs text-orange-500 mt-1">Paused</p>
                   )}
@@ -1388,6 +1425,8 @@ export default function APIPageClient({ machineId }) {
         onClose={() => {
           setShowAddModal(false);
           setNewKeyName("");
+          setNewKeyTokenLimit("");
+          setNewKeyExpiresAt("");
         }}
       >
         <div className="flex flex-col gap-4">
@@ -1397,6 +1436,24 @@ export default function APIPageClient({ machineId }) {
             onChange={(e) => setNewKeyName(e.target.value)}
             placeholder="Production Key"
           />
+          <Input
+            label="Token Limit (optional)"
+            type="number"
+            min="0"
+            value={newKeyTokenLimit}
+            onChange={(e) => setNewKeyTokenLimit(e.target.value)}
+            placeholder="e.g. 1000000 — leave empty for unlimited"
+          />
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-text-main">Expires At (optional)</label>
+            <input
+              type="datetime-local"
+              value={newKeyExpiresAt}
+              onChange={(e) => setNewKeyExpiresAt(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-surface-1 text-text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            <p className="text-xs text-text-muted">Leave empty for a key that never expires.</p>
+          </div>
           <div className="flex gap-2">
             <Button onClick={handleCreateKey} fullWidth disabled={!newKeyName.trim()}>
               Create
@@ -1405,6 +1462,8 @@ export default function APIPageClient({ machineId }) {
               onClick={() => {
                 setShowAddModal(false);
                 setNewKeyName("");
+                setNewKeyTokenLimit("");
+                setNewKeyExpiresAt("");
               }}
               variant="ghost"
               fullWidth

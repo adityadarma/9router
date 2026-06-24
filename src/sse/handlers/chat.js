@@ -6,6 +6,8 @@ import {
   clearAccountError,
   extractApiKey,
   isValidApiKey,
+  checkApiKey,
+  checkApiKeyLimits,
 } from "../services/auth.js";
 import { cacheClaudeHeaders } from "open-sse/utils/claudeHeaderCache.js";
 import { getSettings } from "@/lib/localDb";
@@ -20,6 +22,22 @@ import { detectFormatByEndpoint } from "open-sse/translator/formats.js";
 import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
+
+/**
+ * Build an error response for a denied API key (limit-token feature).
+ */
+function apiKeyDeniedResponse(reason) {
+  switch (reason) {
+    case "expired":
+      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "API key has expired");
+    case "limit":
+      return errorResponse(HTTP_STATUS.FORBIDDEN, "API key token limit reached");
+    case "inactive":
+      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "API key is paused");
+    default:
+      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+  }
+}
 
 /**
  * Handle chat completion request
@@ -73,10 +91,18 @@ export async function handleChat(request, clientRawRequest = null) {
       log.warn("AUTH", "Missing API key (requireApiKey=true)");
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Missing API key");
     }
-    const valid = await isValidApiKey(apiKey);
+    const { valid, reason } = await checkApiKey(apiKey);
     if (!valid) {
-      log.warn("AUTH", "Invalid API key (requireApiKey=true)");
-      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
+      log.warn("AUTH", `API key rejected (requireApiKey=true): ${reason}`);
+      return apiKeyDeniedResponse(reason);
+    }
+  } else if (apiKey) {
+    // requireApiKey is OFF → behave exactly as before (free pass), EXCEPT
+    // honor a known key's configured expiry / token limit if one is set.
+    const { ok, reason } = await checkApiKeyLimits(apiKey);
+    if (!ok) {
+      log.warn("AUTH", `API key limit exceeded: ${reason}`);
+      return apiKeyDeniedResponse(reason);
     }
   }
 
