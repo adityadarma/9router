@@ -29,10 +29,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
+      # This repo intentionally does not commit package-lock.json (.gitignore),
+      # so use `npm install` rather than `npm ci` (which requires a lockfile).
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build (Next.js)
         run: npm run build
@@ -49,10 +50,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       # The repository currently carries pre-existing lint findings, so lint is
       # reported but does not fail the pipeline. Remove continue-on-error once
@@ -71,16 +71,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
       # Tests resolve aliases into ../src and ../open-sse, so the root deps
       # must be present alongside the tests workspace deps.
       - name: Install root dependencies
-        run: npm ci
+        run: npm install
 
       - name: Install test dependencies
         working-directory: tests
-        run: npm ci
+        run: npm install
 
       # Exclude live/cloud suites that require network access or provider
       # credentials and would be flaky in CI.
