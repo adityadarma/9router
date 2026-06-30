@@ -341,10 +341,26 @@ export async function checkApiKeyLimits(apiKey) {
  * requested model. Unknown keys, missing keys, or keys with an empty
  * allowedModels list are unrestricted (ok: true), so behavior is unchanged
  * unless a key explicitly restricts its models.
+ *
+ * Matching is tolerant of equivalent spellings: a client may reference a model
+ * by provider alias ("kr/x"), full provider id ("kiro/x"), a custom alias, or a
+ * combo name. Both the requested model and each allowed entry are reduced to a
+ * canonical key before comparison, so any equivalent form is accepted.
  */
 export async function checkApiKeyModel(apiKey, modelStr) {
   if (!apiKey || !modelStr) return { ok: true };
   const key = await getApiKeyByKey(apiKey);
   if (!key) return { ok: true };
-  return { ok: keyModelAllowed(key, modelStr) };
+  const allowed = Array.isArray(key.allowedModels) ? key.allowedModels : [];
+  if (allowed.length === 0) return { ok: true };
+
+  // Fast path: exact string match against the stored list.
+  if (allowed.includes(modelStr)) return { ok: true };
+
+  // Tolerant path: compare canonical keys so equivalent spellings match.
+  const { canonicalModelKey } = await import("./model.js");
+  const requested = await canonicalModelKey(modelStr);
+  if (!requested) return { ok: keyModelAllowed(key, modelStr) };
+  const allowedKeys = await Promise.all(allowed.map((m) => canonicalModelKey(m)));
+  return { ok: allowedKeys.includes(requested) };
 }

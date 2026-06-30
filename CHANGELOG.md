@@ -1,11 +1,12 @@
-# v0.5.17 (2026-06-30)
+# v0.5.16 (2026-06-30)
 
 ## Features
 - **API keys**: per-key access controls. When creating a key you can set an optional token budget (prompt + completion) and an expiry date; both are also editable later from the key's edit dialog.
   - Requests are rejected with a clear error when a key is expired (`401`) or has reached its token limit (`403`). Keys without either setting behave exactly as before (unrestricted).
   - Limits are enforced even when `requireApiKey` is off, but only for known keys that have a limit/expiry configured — unrestricted and unknown keys keep passing through as before.
   - `tokensUsed` is read-only: it only increases as real requests consume tokens and can never be set or overwritten through updates.
-- **API keys**: per-key allowed-models. Restrict a key to a chosen set of models/combos via a searchable picker (sourced from `/v1/models`, includes combos). Empty list = all models allowed. Editable after creation. Requests for a disallowed model are rejected with `403`.
+- **API keys**: per-key allowed-models. Restrict a key to a chosen set of models/combos. The model picker reuses the same `ModelSelectModal` as the Create Combo page — models grouped by provider, a dedicated Combos section, search, provider icons, and capability badges. Combo names can be selected to restrict a key (just like combos can reference other combos). Empty list = all models allowed. Editable after creation.
+  - Model matching is tolerant of equivalent spellings: a request referencing a model by provider alias (`kr/...`), full provider id (`kiro/...`), a custom alias, or a combo name is reduced to a canonical key before comparison, so any equivalent form is accepted while different models/combos are rejected with `403`.
 - **CI**: GitHub Actions workflow that builds, lints, and runs the unit test subset on every push to the working branch and on pull requests.
 - **Docker**: build-and-push workflow targets GHCR and runs on manual dispatch or `v*` tags.
 
