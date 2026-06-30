@@ -1,4 +1,4 @@
-import { getProviderConnections, validateApiKey, validateApiKeyDetailed, getApiKeyByKey, keyLimitReason, updateProviderConnection, getSettings } from "@/lib/localDb";
+import { getProviderConnections, validateApiKey, validateApiKeyDetailed, getApiKeyByKey, keyLimitReason, keyModelAllowed, updateProviderConnection, getSettings } from "@/lib/localDb";
 import { resolveConnectionProxyConfig } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
@@ -334,4 +334,17 @@ export async function checkApiKeyLimits(apiKey) {
   if (!key) return { ok: true, reason: null }; // unknown key → free pass (as before)
   const reason = keyLimitReason(key);
   return { ok: !reason, reason };
+}
+
+/**
+ * Per-key allowed-models check. Returns { ok } — true when the key may use the
+ * requested model. Unknown keys, missing keys, or keys with an empty
+ * allowedModels list are unrestricted (ok: true), so behavior is unchanged
+ * unless a key explicitly restricts its models.
+ */
+export async function checkApiKeyModel(apiKey, modelStr) {
+  if (!apiKey || !modelStr) return { ok: true };
+  const key = await getApiKeyByKey(apiKey);
+  if (!key) return { ok: true };
+  return { ok: keyModelAllowed(key, modelStr) };
 }

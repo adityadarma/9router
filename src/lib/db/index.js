@@ -30,7 +30,7 @@ export {
 // API keys
 export {
   getApiKeys, getApiKeyById, getApiKeyByKey, createApiKey, updateApiKey, deleteApiKey,
-  validateApiKey, validateApiKeyDetailed, addTokensUsedByKey, keyLimitReason,
+  validateApiKey, validateApiKeyDetailed, addTokensUsedByKey, keyLimitReason, keyModelAllowed,
 } from "./repos/apiKeysRepo.js";
 
 // Combos
@@ -78,7 +78,7 @@ export async function exportDb() {
     providerConnections: db.all(`SELECT * FROM providerConnections`).map((r) => ({ ...parseJson(r.data, {}), id: r.id, provider: r.provider, authType: r.authType, name: r.name, email: r.email, priority: r.priority, isActive: r.isActive === 1, createdAt: r.createdAt, updatedAt: r.updatedAt })),
     providerNodes: db.all(`SELECT * FROM providerNodes`).map((r) => ({ ...parseJson(r.data, {}), id: r.id, type: r.type, name: r.name, createdAt: r.createdAt, updatedAt: r.updatedAt })),
     proxyPools: db.all(`SELECT * FROM proxyPools`).map((r) => ({ ...parseJson(r.data, {}), id: r.id, isActive: r.isActive === 1, testStatus: r.testStatus, createdAt: r.createdAt, updatedAt: r.updatedAt })),
-    apiKeys: db.all(`SELECT * FROM apiKeys`).map((r) => ({ id: r.id, key: r.key, name: r.name, machineId: r.machineId, isActive: r.isActive === 1, createdAt: r.createdAt, tokenLimit: r.tokenLimit != null ? Number(r.tokenLimit) : null, expiresAt: r.expiresAt || null, tokensUsed: r.tokensUsed != null ? Number(r.tokensUsed) : 0 })),
+    apiKeys: db.all(`SELECT * FROM apiKeys`).map((r) => ({ id: r.id, key: r.key, name: r.name, machineId: r.machineId, isActive: r.isActive === 1, createdAt: r.createdAt, tokenLimit: r.tokenLimit != null ? Number(r.tokenLimit) : null, expiresAt: r.expiresAt || null, tokensUsed: r.tokensUsed != null ? Number(r.tokensUsed) : 0, allowedModels: parseJson(r.allowedModels, []) })),
     combos: db.all(`SELECT * FROM combos`).map((r) => ({ id: r.id, name: r.name, kind: r.kind, models: parseJson(r.models, []), createdAt: r.createdAt, updatedAt: r.updatedAt })),
     modelAliases: {},
     customModels: [],
@@ -138,8 +138,8 @@ export async function importDb(payload) {
     }
     for (const k of payload.apiKeys || []) {
       db.run(
-        `INSERT OR REPLACE INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, expiresAt, tokensUsed) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [k.id, k.key, k.name || null, k.machineId || null, k.isActive === false ? 0 : 1, k.createdAt || new Date().toISOString(), k.tokenLimit != null ? Number(k.tokenLimit) : null, k.expiresAt || null, k.tokensUsed != null ? Number(k.tokensUsed) : 0]
+        `INSERT OR REPLACE INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, expiresAt, tokensUsed, allowedModels) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [k.id, k.key, k.name || null, k.machineId || null, k.isActive === false ? 0 : 1, k.createdAt || new Date().toISOString(), k.tokenLimit != null ? Number(k.tokenLimit) : null, k.expiresAt || null, k.tokensUsed != null ? Number(k.tokensUsed) : 0, stringifyJson(Array.isArray(k.allowedModels) ? k.allowedModels : [])]
       );
     }
     for (const c of payload.combos || []) {

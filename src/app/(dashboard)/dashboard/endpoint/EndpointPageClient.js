@@ -17,6 +17,7 @@ import EndpointRow from "./components/EndpointRow";
 import StatusAlert from "./components/StatusAlert";
 import Tooltip from "./components/Tooltip";
 import SecurityWarning from "./components/SecurityWarning";
+import AllowedModelsPicker from "./components/AllowedModelsPicker";
 export default function APIPageClient({ machineId }) {
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -24,8 +25,16 @@ export default function APIPageClient({ machineId }) {
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyTokenLimit, setNewKeyTokenLimit] = useState("");
   const [newKeyExpiresAt, setNewKeyExpiresAt] = useState("");
+  const [newKeyAllowedModels, setNewKeyAllowedModels] = useState([]);
   const [createdKey, setCreatedKey] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
+
+  // Edit modal state (edit allowed models + token limit + expiry)
+  const [editModelsKey, setEditModelsKey] = useState(null);
+  const [editModelsList, setEditModelsList] = useState([]);
+  const [editTokenLimit, setEditTokenLimit] = useState("");
+  const [editExpiresAt, setEditExpiresAt] = useState("");
+  const [savingModels, setSavingModels] = useState(false);
 
   const [requireApiKey, setRequireApiKey] = useState(false);
   const [requireLogin, setRequireLogin] = useState(true);
@@ -622,6 +631,7 @@ export default function APIPageClient({ machineId }) {
         const [y, m, d] = newKeyExpiresAt.split("-").map(Number);
         payload.expiresAt = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
       }
+      if (newKeyAllowedModels.length > 0) payload.allowedModels = newKeyAllowedModels;
 
       const res = await fetch("/api/keys", {
         method: "POST",
@@ -636,10 +646,72 @@ export default function APIPageClient({ machineId }) {
         setNewKeyName("");
         setNewKeyTokenLimit("");
         setNewKeyExpiresAt("");
+        setNewKeyAllowedModels([]);
         setShowAddModal(false);
       }
     } catch (error) {
       console.log("Error creating key:", error);
+    }
+  };
+
+  // ─── Edit existing key (allowed models + token limit + expiry) ───
+  const openEditModels = (key) => {
+    setEditModelsKey(key);
+    setEditModelsList(Array.isArray(key.allowedModels) ? key.allowedModels : []);
+    setEditTokenLimit(key.tokenLimit ? String(key.tokenLimit) : "");
+    // Convert stored ISO timestamp back to a local YYYY-MM-DD for the date input.
+    if (key.expiresAt) {
+      const d = new Date(key.expiresAt);
+      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      setEditExpiresAt(ymd);
+    } else {
+      setEditExpiresAt("");
+    }
+  };
+
+  const closeEditModels = () => {
+    setEditModelsKey(null);
+    setEditModelsList([]);
+    setEditTokenLimit("");
+    setEditExpiresAt("");
+  };
+
+  const handleSaveModels = async () => {
+    if (!editModelsKey) return;
+    setSavingModels(true);
+    try {
+      const payload = { allowedModels: editModelsList };
+      const limitNum = parseInt(editTokenLimit, 10);
+      // Empty field → null (unlimited); otherwise the parsed positive integer.
+      payload.tokenLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : null;
+      // Empty date → null (never); otherwise end-of-day local time.
+      if (editExpiresAt) {
+        const [y, m, d] = editExpiresAt.split("-").map(Number);
+        payload.expiresAt = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
+      } else {
+        payload.expiresAt = null;
+      }
+
+      const res = await fetch(`/api/keys/${editModelsKey.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const k = data.key || {};
+        setKeys(prev => prev.map(x => x.id === editModelsKey.id ? {
+          ...x,
+          allowedModels: k.allowedModels ?? editModelsList,
+          tokenLimit: k.tokenLimit ?? payload.tokenLimit,
+          expiresAt: k.expiresAt ?? payload.expiresAt,
+        } : x));
+        closeEditModels();
+      }
+    } catch (error) {
+      console.log("Error saving API key:", error);
+    } finally {
+      setSavingModels(false);
     }
   };
 
@@ -1066,11 +1138,30 @@ export default function APIPageClient({ machineId }) {
                       ) : null}
                     </div>
                   )}
+                  {Array.isArray(key.allowedModels) && key.allowedModels.length > 0 ? (
+                    <div className="flex flex-wrap items-center gap-1 mt-1">
+                      <span className="text-xs text-text-muted mr-1">Models:</span>
+                      {key.allowedModels.map((m) => (
+                        <span key={m} className="text-xs font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-muted mt-1">Models: all allowed</p>
+                  )}
                   {key.isActive === false && (
                     <p className="text-xs text-orange-500 mt-1">Paused</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openEditModels(key)}
+                    className="p-2 hover:bg-primary/10 rounded text-text-muted hover:text-primary opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                    title="Edit API key"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">tune</span>
+                  </button>
                   <Toggle
                     size="sm"
                     checked={key.isActive ?? true}
@@ -1112,6 +1203,7 @@ export default function APIPageClient({ machineId }) {
           setNewKeyName("");
           setNewKeyTokenLimit("");
           setNewKeyExpiresAt("");
+          setNewKeyAllowedModels([]);
         }}
       >
         <div className="flex flex-col gap-4">
@@ -1139,6 +1231,14 @@ export default function APIPageClient({ machineId }) {
             />
             <p className="text-xs text-text-muted">Leave empty for a key that never expires.</p>
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-text-main">Allowed Models (optional)</label>
+            <AllowedModelsPicker
+              selected={newKeyAllowedModels}
+              onChange={setNewKeyAllowedModels}
+            />
+            <p className="text-xs text-text-muted">Leave empty to allow all models. You can change this later.</p>
+          </div>
           <div className="flex gap-2">
             <Button onClick={handleCreateKey} fullWidth disabled={!newKeyName.trim()}>
               Create
@@ -1149,6 +1249,7 @@ export default function APIPageClient({ machineId }) {
                 setNewKeyName("");
                 setNewKeyTokenLimit("");
                 setNewKeyExpiresAt("");
+                setNewKeyAllowedModels([]);
               }}
               variant="ghost"
               fullWidth
@@ -1191,6 +1292,54 @@ export default function APIPageClient({ machineId }) {
           <Button onClick={() => setCreatedKey(null)} fullWidth>
             Done
           </Button>
+        </div>
+      </Modal>
+
+      {/* Edit API Key Modal (allowed models + token limit + expiry) */}
+      <Modal
+        isOpen={!!editModelsKey}
+        title={editModelsKey ? `Edit API Key — ${editModelsKey.name}` : "Edit API Key"}
+        onClose={closeEditModels}
+      >
+        <div className="flex flex-col gap-4">
+          <Input
+            label="Token Limit (optional)"
+            type="number"
+            min="0"
+            value={editTokenLimit}
+            onChange={(e) => setEditTokenLimit(e.target.value)}
+            placeholder="e.g. 1000000 — leave empty for unlimited"
+          />
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-text-main">Expires At (optional)</label>
+            <input
+              type="date"
+              value={editExpiresAt}
+              onChange={(e) => setEditExpiresAt(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-surface-1 text-text-main text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            <p className="text-xs text-text-muted">Leave empty for a key that never expires.</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium text-text-main">Allowed Models</label>
+            <AllowedModelsPicker
+              selected={editModelsList}
+              onChange={setEditModelsList}
+            />
+            <p className="text-xs text-text-muted">Leave empty to allow all models.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={handleSaveModels} fullWidth disabled={savingModels}>
+              {savingModels ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              onClick={closeEditModels}
+              variant="ghost"
+              fullWidth
+            >
+              Cancel
+            </Button>
+          </div>
         </div>
       </Modal>
 

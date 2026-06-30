@@ -5,9 +5,9 @@ import {
   markAccountUnavailable,
   clearAccountError,
   extractApiKey,
-  isValidApiKey,
   checkApiKey,
   checkApiKeyLimits,
+  checkApiKeyModel,
 } from "../services/auth.js";
 import { cacheClaudeHeaders } from "open-sse/utils/claudeHeaderCache.js";
 import { getSettings } from "@/lib/localDb";
@@ -34,6 +34,8 @@ function apiKeyDeniedResponse(reason) {
       return errorResponse(HTTP_STATUS.FORBIDDEN, "API key token limit reached");
     case "inactive":
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "API key is paused");
+    case "model_not_allowed":
+      return errorResponse(HTTP_STATUS.FORBIDDEN, "This API key is not allowed to use the requested model");
     default:
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
   }
@@ -109,6 +111,17 @@ export async function handleChat(request, clientRawRequest = null) {
   if (!modelStr) {
     log.warn("CHAT", "Missing model");
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
+  }
+
+  // Enforce per-key allowed-models. Applies whenever a known key restricts its
+  // models (non-empty allowedModels), regardless of requireApiKey. Keys with no
+  // restriction, unknown keys, and no-key requests are unaffected.
+  if (apiKey) {
+    const { ok } = await checkApiKeyModel(apiKey, modelStr);
+    if (!ok) {
+      log.warn("AUTH", `Model "${modelStr}" not allowed for this API key`);
+      return apiKeyDeniedResponse("model_not_allowed");
+    }
   }
 
   // Bypass naming/warmup requests before combo rotation to avoid wasting rotation slots
