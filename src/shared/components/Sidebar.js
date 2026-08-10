@@ -292,7 +292,7 @@ export default function Sidebar({ onClose }) {
             })}
 
             {/* Remote */}
-            <button
+            {/* <button
               onClick={() => setShowRemoteModal(true)}
               className={cn(
                 "flex items-center gap-3 px-3 py-1 rounded-lg transition-all group w-full",
@@ -303,10 +303,10 @@ export default function Sidebar({ onClose }) {
                 computer
               </span>
               <span className="text-[13px] font-medium">9Remote</span>
-            </button>
+            </button> */}
 
             {/* 9English */}
-            <a
+            {/* <a
               href="https://9english.net/"
               target="_blank"
               rel="noreferrer"
@@ -320,7 +320,7 @@ export default function Sidebar({ onClose }) {
                 translate
               </span>
               <span className="text-[13px] font-medium">9English</span>
-            </a>
+            </a> */}
 
             {/* Settings */}
             <Link
