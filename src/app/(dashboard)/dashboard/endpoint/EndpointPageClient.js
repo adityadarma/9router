@@ -1148,34 +1148,36 @@ export default function APIPageClient({ machineId }) {
                   <p className="text-xs text-text-muted mt-1">
                     Created {new Date(key.createdAt).toLocaleDateString()}
                   </p>
-                  {(key.tokenLimit || key.expiresAt) && (
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
-                      {key.tokenLimit ? (
-                        <span
-                          className={`text-xs ${
-                            (key.tokensUsed || 0) >= key.tokenLimit
-                              ? "text-red-500 font-medium"
-                              : "text-text-muted"
-                          }`}
-                        >
-                          {(key.tokensUsed || 0).toLocaleString()} / {key.tokenLimit.toLocaleString()} tokens
-                        </span>
-                      ) : null}
-                      {key.expiresAt ? (
-                        <span
-                          className={`text-xs ${
-                            Date.now() >= new Date(key.expiresAt).getTime()
-                              ? "text-red-500 font-medium"
-                              : "text-text-muted"
-                          }`}
-                        >
-                          {Date.now() >= new Date(key.expiresAt).getTime()
-                            ? `Expired ${new Date(key.expiresAt).toLocaleDateString()}`
-                            : `Expires ${new Date(key.expiresAt).toLocaleDateString()}`}
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    {key.tokenLimit ? (
+                      <span
+                        className={`text-xs ${
+                          (key.tokensUsed || 0) >= key.tokenLimit
+                            ? "text-red-500 font-medium"
+                            : "text-text-muted"
+                        }`}
+                      >
+                        {(key.tokensUsed || 0).toLocaleString()} / {key.tokenLimit.toLocaleString()} tokens
+                      </span>
+                    ) : (
+                      <span className="text-xs text-text-muted">
+                        {(key.tokensUsed || 0).toLocaleString()} tokens used
+                      </span>
+                    )}
+                    {key.expiresAt ? (
+                      <span
+                        className={`text-xs ${
+                          Date.now() >= new Date(key.expiresAt).getTime()
+                            ? "text-red-500 font-medium"
+                            : "text-text-muted"
+                        }`}
+                      >
+                        {Date.now() >= new Date(key.expiresAt).getTime()
+                          ? `Expired ${new Date(key.expiresAt).toLocaleDateString()}`
+                          : `Expires ${new Date(key.expiresAt).toLocaleDateString()}`}
+                      </span>
+                    ) : null}
+                  </div>
                   {Array.isArray(key.allowedModels) && key.allowedModels.length > 0 ? (
                     <div className="flex flex-wrap items-center gap-1 mt-1">
                       <span className="text-xs text-text-muted mr-1">Models:</span>
