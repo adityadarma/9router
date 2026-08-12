@@ -309,17 +309,19 @@ export async function saveRequestUsage(entry) {
       scheduleStatsEvent("update", 250);
     }
 
-    // Limit-token: accrue consumed tokens against the API key's running total.
-    // Done outside the usage transaction (different table, best-effort).
+    // Limit-token: accrue consumed tokens against the API key's running total,
+    // and stamp when the key was last used. Done outside the usage transaction
+    // (different table, best-effort).
     if (entry.apiKey && typeof entry.apiKey === "string") {
       const totalTokens = (promptTokens || 0) + (completionTokens || 0);
-      if (totalTokens > 0) {
-        try {
-          const { addTokensUsedByKey } = await import("./apiKeysRepo.js");
-          await addTokensUsedByKey(entry.apiKey, totalTokens);
-        } catch (e) {
-          console.error("Failed to accrue API key token usage:", e);
-        }
+      try {
+        const { addTokensUsedByKey, touchApiKeyUsed } = await import("./apiKeysRepo.js");
+        if (totalTokens > 0) await addTokensUsedByKey(entry.apiKey, totalTokens);
+        // Stamped even for zero-token requests (errors, empty responses) so
+        // "last used" reflects real activity, not just billable activity.
+        await touchApiKeyUsed(entry.apiKey, entry.timestamp);
+      } catch (e) {
+        console.error("Failed to accrue API key token usage:", e);
       }
     }
   } catch (e) {

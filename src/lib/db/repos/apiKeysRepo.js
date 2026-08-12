@@ -17,6 +17,8 @@ function rowToKey(row) {
     tokensUsed: row.tokensUsed != null ? Number(row.tokensUsed) : 0,
     // allowedModels: [] (empty) = no restriction (any model allowed).
     allowedModels: normalizeAllowedModels(parseJson(row.allowedModels, [])),
+    // null = never used yet.
+    lastUsedAt: row.lastUsedAt || null,
   };
 }
 
@@ -104,10 +106,11 @@ export async function createApiKey(name, machineId, options = {}) {
     expiresAt: normalizeExpiresAt(options.expiresAt),
     tokensUsed: 0,
     allowedModels: normalizeAllowedModels(options.allowedModels),
+    lastUsedAt: null,
   };
   db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, expiresAt, tokensUsed, allowedModels) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, apiKey.tokenLimit, apiKey.expiresAt, 0, stringifyJson(apiKey.allowedModels)]
+    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, expiresAt, tokensUsed, allowedModels, lastUsedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, apiKey.tokenLimit, apiKey.expiresAt, 0, stringifyJson(apiKey.allowedModels), null]
   );
   return apiKey;
 }
@@ -128,6 +131,7 @@ export async function updateApiKey(id, data) {
       [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.tokenLimit, merged.expiresAt, stringifyJson(merged.allowedModels || []), id]
     );
     merged.tokensUsed = current.tokensUsed;
+    merged.lastUsedAt = current.lastUsedAt;
     result = merged;
   });
   return result;
@@ -142,6 +146,18 @@ export async function addTokensUsedByKey(key, tokens) {
     `UPDATE apiKeys SET tokensUsed = COALESCE(tokensUsed, 0) + ? WHERE key = ?`,
     [Math.floor(tokens), key]
   );
+}
+
+// Stamp the last-used time on a key (matched by key string). Best-effort:
+// called on every authenticated request, so failures must never block traffic.
+export async function touchApiKeyUsed(key, when) {
+  if (!key || typeof key !== "string") return;
+  const db = await getAdapter();
+  // Fall back to now when the caller passes an unparseable timestamp, so a bad
+  // input degrades to a slightly-off time instead of throwing.
+  const parsed = when ? new Date(when) : new Date();
+  const ts = isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+  db.run(`UPDATE apiKeys SET lastUsedAt = ? WHERE key = ?`, [ts, key]);
 }
 
 export async function deleteApiKey(id) {

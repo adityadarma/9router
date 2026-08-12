@@ -17,6 +17,21 @@ import EndpointRow from "./components/EndpointRow";
 import StatusAlert from "./components/StatusAlert";
 import Tooltip from "./components/Tooltip";
 import SecurityWarning from "./components/SecurityWarning";
+
+// Relative "last used" label. Falls back to an absolute date past a week,
+// where "8d ago" stops being more useful than the date itself.
+function formatLastUsed(value) {
+  if (!value) return "Never used";
+  const then = new Date(value).getTime();
+  if (isNaN(then)) return "Never used";
+  const diff = Math.floor((Date.now() - then) / 1000);
+  if (diff < 60) return "Last used just now";
+  if (diff < 3600) return `Last used ${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `Last used ${Math.floor(diff / 3600)}h ago`;
+  if (diff < 604800) return `Last used ${Math.floor(diff / 86400)}d ago`;
+  return `Last used ${new Date(then).toLocaleDateString()}`;
+}
+
 export default function APIPageClient({ machineId }) {
   const [keys, setKeys] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1145,9 +1160,17 @@ export default function APIPageClient({ machineId }) {
                       </span>
                     </button>
                   </div>
-                  <p className="text-xs text-text-muted mt-1">
-                    Created {new Date(key.createdAt).toLocaleDateString()}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                    <span className="text-xs text-text-muted">
+                      Created {new Date(key.createdAt).toLocaleDateString()}
+                    </span>
+                    <span
+                      className={`text-xs ${key.lastUsedAt ? "text-text-muted" : "text-text-muted/60"}`}
+                      title={key.lastUsedAt ? new Date(key.lastUsedAt).toLocaleString() : "This key has never been used"}
+                    >
+                      {formatLastUsed(key.lastUsedAt)}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     {key.tokenLimit ? (
                       <span

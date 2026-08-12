@@ -1,3 +1,19 @@
+# v0.5.52 (2026-08-12)
+
+## Features
+- **Endpoint**: track and show when each API key was last used — new `lastUsedAt`
+  column on `apiKeys`, stamped whenever a key is seen on a request. The key card
+  shows a relative label (`Last used 5m ago`, `2h ago`, `3d ago`), falls back to
+  an absolute date past a week, and reads `Never used` for keys that have never
+  served traffic. Stamped even for zero-token requests (errors, empty responses)
+  so the timestamp reflects real activity, not just billable activity
+
+## Fixes
+- **Endpoint**: always show a key's token usage. Consumed tokens were only
+  rendered when the key had a token limit configured, so unlimited keys — the
+  default — appeared to have no usage at all
+- **Sidebar**: hide the unfinished Remote and 9English entries
+
 # v0.5.50 (2026-08-05)
 
 ## Features
