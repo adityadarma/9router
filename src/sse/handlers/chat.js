@@ -123,10 +123,10 @@ export async function handleChat(request, clientRawRequest = null) {
 
   // Check context limit BEFORE starting model rotation/combo expansion
   if (apiKey) {
-    const { countTokens } = await import("open-sse/utils/tokenizer.js");
     let promptTokens = 0;
     try {
-      promptTokens = countTokens(JSON.stringify(body));
+      // Rough approximation: 1 token ~= 4 chars of JSON payload
+      promptTokens = Math.ceil(JSON.stringify(body).length / 4);
     } catch (err) {
       log.debug("AUTH", `Token counting failed for context limit: ${err.message}`);
     }
