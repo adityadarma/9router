@@ -8,6 +8,7 @@ import {
   checkApiKey,
   checkApiKeyLimits,
   checkApiKeyModel,
+  checkApiKeyContextLimit,
 } from "../services/auth.js";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
@@ -26,14 +27,16 @@ import { updateProviderCredentials, checkAndRefreshToken } from "../services/tok
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 
 /**
- * Build an error response for a denied API key (limit-token feature).
+ * Build an error response for a denied API key (limit-token/context feature).
  */
-function apiKeyDeniedResponse(reason) {
+function apiKeyDeniedResponse(reason, limit = null) {
   switch (reason) {
     case "expired":
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "API key has expired");
     case "limit":
       return errorResponse(HTTP_STATUS.FORBIDDEN, "API key token limit reached");
+    case "context_limit":
+      return errorResponse(HTTP_STATUS.FORBIDDEN, `Request prompt size exceeds the API key context limit of ${limit} tokens`);
     case "inactive":
       return errorResponse(HTTP_STATUS.UNAUTHORIZED, "API key is paused");
     case "model_not_allowed":
@@ -115,6 +118,22 @@ export async function handleChat(request, clientRawRequest = null) {
     if (!ok) {
       log.warn("AUTH", `Model "${modelStr}" not allowed for this API key`);
       return apiKeyDeniedResponse("model_not_allowed");
+    }
+  }
+
+  // Check context limit BEFORE starting model rotation/combo expansion
+  if (apiKey) {
+    const { countTokens } = await import("open-sse/utils/tokenizer.js");
+    let promptTokens = 0;
+    try {
+      promptTokens = countTokens(JSON.stringify(body));
+    } catch (err) {
+      log.debug("AUTH", `Token counting failed for context limit: ${err.message}`);
+    }
+    const { ok, limit } = await checkApiKeyContextLimit(apiKey, promptTokens);
+    if (!ok) {
+      log.warn("AUTH", `Context limit exceeded for API key: ${promptTokens} > ${limit}`);
+      return apiKeyDeniedResponse("context_limit", limit);
     }
   }
 

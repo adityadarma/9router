@@ -13,6 +13,7 @@ function rowToKey(row) {
     createdAt: row.createdAt,
     // Limit-token fields. tokenLimit/expiresAt null = unlimited/never.
     tokenLimit: row.tokenLimit != null ? Number(row.tokenLimit) : null,
+    contextLimit: row.contextLimit != null ? Number(row.contextLimit) : null,
     expiresAt: row.expiresAt || null,
     tokensUsed: row.tokensUsed != null ? Number(row.tokensUsed) : 0,
     // allowedModels: [] (empty) = no restriction (any model allowed).
@@ -24,6 +25,14 @@ function rowToKey(row) {
 
 // Normalize a raw token-limit input into a positive integer or null (unlimited).
 function normalizeTokenLimit(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.floor(n);
+}
+
+// Normalize a raw context-limit input into a positive integer or null (unlimited).
+function normalizeContextLimit(value) {
   if (value == null || value === "") return null;
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return null;
@@ -60,6 +69,7 @@ export function keyLimitReason(key) {
   if (!key) return null;
   if (key.expiresAt && Date.now() >= new Date(key.expiresAt).getTime()) return "expired";
   if (key.tokenLimit && key.tokenLimit > 0 && (key.tokensUsed || 0) >= key.tokenLimit) return "limit";
+  // Context limit check is done at request time (in checkApiKeyContextLimit) since it depends on the prompt size
   return null;
 }
 
@@ -103,14 +113,15 @@ export async function createApiKey(name, machineId, options = {}) {
     isActive: true,
     createdAt: new Date().toISOString(),
     tokenLimit: normalizeTokenLimit(options.tokenLimit),
+    contextLimit: normalizeContextLimit(options.contextLimit),
     expiresAt: normalizeExpiresAt(options.expiresAt),
     tokensUsed: 0,
     allowedModels: normalizeAllowedModels(options.allowedModels),
     lastUsedAt: null,
   };
   db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, expiresAt, tokensUsed, allowedModels, lastUsedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, apiKey.tokenLimit, apiKey.expiresAt, 0, stringifyJson(apiKey.allowedModels), null]
+    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, contextLimit, expiresAt, tokensUsed, allowedModels, lastUsedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, apiKey.tokenLimit, apiKey.contextLimit, apiKey.expiresAt, 0, stringifyJson(apiKey.allowedModels), null]
   );
   return apiKey;
 }
@@ -124,11 +135,12 @@ export async function updateApiKey(id, data) {
     const current = rowToKey(row);
     const merged = { ...current, ...data };
     if ("tokenLimit" in data) merged.tokenLimit = normalizeTokenLimit(data.tokenLimit);
+    if ("contextLimit" in data) merged.contextLimit = normalizeContextLimit(data.contextLimit);
     if ("expiresAt" in data) merged.expiresAt = normalizeExpiresAt(data.expiresAt);
     if ("allowedModels" in data) merged.allowedModels = normalizeAllowedModels(data.allowedModels);
     db.run(
-      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, tokenLimit = ?, expiresAt = ?, allowedModels = ? WHERE id = ?`,
-      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.tokenLimit, merged.expiresAt, stringifyJson(merged.allowedModels || []), id]
+      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, tokenLimit = ?, contextLimit = ?, expiresAt = ?, allowedModels = ? WHERE id = ?`,
+      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.tokenLimit, merged.contextLimit, merged.expiresAt, stringifyJson(merged.allowedModels || []), id]
     );
     merged.tokensUsed = current.tokensUsed;
     merged.lastUsedAt = current.lastUsedAt;

@@ -366,6 +366,21 @@ export async function checkApiKeyLimits(apiKey) {
 }
 
 /**
+ * Limit-context check ONLY. Used to verify a request's prompt size doesn't
+ * exceed the API key's configured contextLimit.
+ * Returns { ok, limit } where limit is the context limit or null.
+ */
+export async function checkApiKeyContextLimit(apiKey, promptTokens) {
+  if (!apiKey) return { ok: true, limit: null };
+  const key = await getApiKeyByKey(apiKey);
+  if (!key || !key.contextLimit) return { ok: true, limit: null };
+  return {
+    ok: promptTokens <= key.contextLimit,
+    limit: key.contextLimit
+  };
+}
+
+/**
  * Per-key allowed-models check. Returns { ok } — true when the key may use the
  * requested model. Unknown keys, missing keys, or keys with an empty
  * allowedModels list are unrestricted (ok: true), so behavior is unchanged
