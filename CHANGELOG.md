@@ -1,3 +1,8 @@
+# v0.5.53 (2026-08-12)
+
+## Features
+- **API keys**: added optional context window limit (`contextLimit`). You can now enforce a maximum prompt size (in tokens) per API key, independent of the lifetime token quota. Exceeding this limit immediately rejects the request with a `403` status. The UI in the Endpoint page has been updated to support setting and editing this limit per key.
+
 # v0.5.52 (2026-08-12)
 
 ## Features
