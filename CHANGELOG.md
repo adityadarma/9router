@@ -6,6 +6,16 @@
   retroactively add a real `FOREIGN KEY` to an existing table). The id is
   generated once per request and shared between both writes, including across
   the streaming placeholder/update pair
+- **Dashboard**: Recent Requests rows are now expandable — click a row to load
+  and preview the model's answer (and thinking, if any) inline via a new
+  `GET /api/usage/request-details/[id]` endpoint, with client-side caching so
+  re-opening a row doesn't refetch
+
+## Fixes
+- **Translator**: fix missing streaming answer/thinking tracking for non-OpenAI
+  passthrough and translated models. The stream extractor now universally
+  checks all known shapes (`delta.text`, `delta.content`, `candidates`) so
+  streaming requests no longer save as `[Empty streaming response]`
 
 # v0.5.55 (2026-08-14)
 
