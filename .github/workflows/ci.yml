@@ -1,16 +1,16 @@
 name: CI
 
 # Runs code checks, lint, and tests automatically on every push to the
-# limit-token branch (and on pull requests targeting main/master/limit-token).
+# custom branch (and on pull requests targeting main/master/custom).
 on:
   push:
     branches:
-      - limit-token
+      - custom
   pull_request:
     branches:
       - main
       - master
-      - limit-token
+      - custom
   workflow_dispatch:
 
 # Cancel superseded runs on the same ref to save CI minutes.

@@ -65,6 +65,60 @@ export function createSSEStream(options = {}) {
   let totalContentLength = 0;
   let accumulatedContent = "";
   let accumulatedThinking = "";
+  // Tool calls carry the actual output for tool-only turns (e.g. Kiro function
+  // calls). Without this, a turn that never emits plain text/thinking left
+  // accumulatedContent empty and the request-detail log fell back to
+  // "[Empty streaming response]" despite non-zero completion tokens.
+  const openAIToolCallAcc = new Map(); // index -> { id, name, arguments }
+  const claudeToolBlocks = new Map();  // block index -> { id, name, arguments }
+  const geminiFunctionCalls = [];      // Gemini/Antigravity/Vertex functionCall parts are always complete (non-fragmented)
+
+  function accumulateOpenAIToolCalls(toolCallsDelta) {
+    for (const tc of toolCallsDelta) {
+      const idx = tc.index ?? tc.id ?? 0;
+      const entry = openAIToolCallAcc.get(idx) || { id: "", name: "", arguments: "" };
+      if (tc.id) entry.id = tc.id;
+      if (typeof tc.function?.name === "string") entry.name += tc.function.name;
+      if (typeof tc.function?.arguments === "string") entry.arguments += tc.function.arguments;
+      openAIToolCallAcc.set(idx, entry);
+    }
+  }
+
+  function accumulateClaudeToolBlock(parsed) {
+    if (parsed.type === "content_block_start" && parsed.content_block?.type === "tool_use") {
+      claudeToolBlocks.set(parsed.index, {
+        id: parsed.content_block.id || "",
+        name: parsed.content_block.name || "",
+        arguments: ""
+      });
+    } else if (parsed.type === "content_block_delta" && parsed.delta?.type === "input_json_delta" && typeof parsed.delta.partial_json === "string") {
+      const block = claudeToolBlocks.get(parsed.index);
+      if (block) block.arguments += parsed.delta.partial_json;
+    }
+  }
+
+  // Gemini/Antigravity/Vertex stream functionCall as a single complete part
+  // (unlike OpenAI/Claude, which fragment name+args across chunks).
+  function accumulateGeminiFunctionCall(functionCall) {
+    if (!functionCall) return;
+    geminiFunctionCalls.push({
+      name: functionCall.name || "",
+      arguments: JSON.stringify(functionCall.args || {})
+    });
+  }
+
+  function toolCallsSummaryText() {
+    const entries = [...openAIToolCallAcc.values(), ...claudeToolBlocks.values(), ...geminiFunctionCalls];
+    if (entries.length === 0) return "";
+    return entries.map(e => `[tool_call] ${e.name || "(unnamed)"}(${e.arguments})`).join("\n");
+  }
+
+  function contentForLogging() {
+    const toolText = toolCallsSummaryText();
+    if (!toolText) return accumulatedContent;
+    return accumulatedContent ? `${accumulatedContent}\n${toolText}` : toolText;
+  }
+
   let ttftAt = null;
   let sseLineCount = 0;
   let sseEmittedCount = 0;
@@ -157,6 +211,9 @@ export function createSSEStream(options = {}) {
                 totalContentLength += parsed.choices[0].delta.reasoning_content.length;
                 accumulatedThinking += parsed.choices[0].delta.reasoning_content;
               }
+              if (Array.isArray(parsed.choices?.[0]?.delta?.tool_calls) && parsed.choices[0].delta.tool_calls.length > 0) {
+                accumulateOpenAIToolCalls(parsed.choices[0].delta.tool_calls);
+              }
               // Claude format
               if (parsed.delta?.text && typeof parsed.delta.text === "string") {
                 totalContentLength += parsed.delta.text.length;
@@ -166,6 +223,7 @@ export function createSSEStream(options = {}) {
                 totalContentLength += parsed.delta.thinking.length;
                 accumulatedThinking += parsed.delta.thinking;
               }
+              accumulateClaudeToolBlock(parsed);
               // Gemini & Antigravity format
               const cands = parsed.candidates || parsed.response?.candidates;
               if (cands?.[0]?.content?.parts) {
@@ -178,6 +236,7 @@ export function createSSEStream(options = {}) {
                       accumulatedContent += part.text;
                     }
                   }
+                  if (part.functionCall) accumulateGeminiFunctionCall(part.functionCall);
                 }
               }
 
@@ -272,7 +331,8 @@ export function createSSEStream(options = {}) {
           totalContentLength += parsed.delta.thinking.length;
           accumulatedThinking += parsed.delta.thinking;
         }
-        
+        accumulateClaudeToolBlock(parsed);
+
         // OpenAI format - content
         if (parsed.choices?.[0]?.delta?.content) {
           totalContentLength += parsed.choices[0].delta.content.length;
@@ -282,6 +342,10 @@ export function createSSEStream(options = {}) {
         if (parsed.choices?.[0]?.delta?.reasoning_content) {
           totalContentLength += parsed.choices[0].delta.reasoning_content.length;
           accumulatedThinking += parsed.choices[0].delta.reasoning_content;
+        }
+        // OpenAI format - tool calls (e.g. Kiro executor emits chat.completion.chunk)
+        if (Array.isArray(parsed.choices?.[0]?.delta?.tool_calls) && parsed.choices[0].delta.tool_calls.length > 0) {
+          accumulateOpenAIToolCalls(parsed.choices[0].delta.tool_calls);
         }
         
         // Gemini & Antigravity format
@@ -297,6 +361,7 @@ export function createSSEStream(options = {}) {
                 accumulatedContent += part.text;
               }
             }
+            if (part.functionCall) accumulateGeminiFunctionCall(part.functionCall);
           }
         }
 
@@ -398,7 +463,7 @@ export function createSSEStream(options = {}) {
 
           if (onStreamComplete) {
             onStreamComplete({
-              content: accumulatedContent,
+              content: contentForLogging(),
               thinking: accumulatedThinking
             }, usage, ttftAt);
           }
@@ -475,7 +540,7 @@ export function createSSEStream(options = {}) {
         
         if (onStreamComplete) {
           onStreamComplete({
-            content: accumulatedContent,
+            content: contentForLogging(),
             thinking: accumulatedThinking
           }, state?.usage, ttftAt);
         }
