@@ -1,11 +1,6 @@
-# v0.5.57 (2026-08-27)
+# v0.5.58 (2026-08-27)
 
 ## Features
-- **Usage**: link `usageHistory` rows to their `requestDetails` payload via a
-  new `requestDetailId` column (soft-FK, indexed, nullable — SQLite can't
-  retroactively add a real `FOREIGN KEY` to an existing table). The id is
-  generated once per request and shared between both writes, including across
-  the streaming placeholder/update pair
 - **Dashboard**: Recent Requests rows are now expandable — click a row to load
   and preview the model's answer (and thinking, if any) inline via a new
   `GET /api/usage/request-details/[id]` endpoint, with client-side caching so
@@ -16,6 +11,16 @@
   passthrough and translated models. The stream extractor now universally
   checks all known shapes (`delta.text`, `delta.content`, `candidates`) so
   streaming requests no longer save as `[Empty streaming response]`
+- **CI**: remove `type=sha` generation during manual workflow dispatch in `docker-publish.yml` to prevent pushing untagged/sha256 placeholder images to GHCR
+
+# v0.5.57 (2026-08-27)
+
+## Features
+- **Usage**: link `usageHistory` rows to their `requestDetails` payload via a
+  new `requestDetailId` column (soft-FK, indexed, nullable — SQLite can't
+  retroactively add a real `FOREIGN KEY` to an existing table). The id is
+  generated once per request and shared between both writes, including across
+  the streaming placeholder/update pair
 
 # v0.5.55 (2026-08-14)
 
