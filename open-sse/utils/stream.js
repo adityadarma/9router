@@ -147,20 +147,38 @@ export function createSSEStream(options = {}) {
                 }
               }
 
-              if (!hasValuableContent(parsed, FORMATS.OPENAI)) {
-                continue;
+              // Optimistically extract content from any known format in passthrough
+              // OpenAI format
+              if (parsed.choices?.[0]?.delta?.content && typeof parsed.choices[0].delta.content === "string") {
+                totalContentLength += parsed.choices[0].delta.content.length;
+                accumulatedContent += parsed.choices[0].delta.content;
               }
-
-              const delta = parsed.choices?.[0]?.delta;
-              const content = delta?.content;
-              const reasoning = delta?.reasoning_content;
-              if (content && typeof content === "string") {
-                totalContentLength += content.length;
-                accumulatedContent += content;
+              if (parsed.choices?.[0]?.delta?.reasoning_content && typeof parsed.choices[0].delta.reasoning_content === "string") {
+                totalContentLength += parsed.choices[0].delta.reasoning_content.length;
+                accumulatedThinking += parsed.choices[0].delta.reasoning_content;
               }
-              if (reasoning && typeof reasoning === "string") {
-                totalContentLength += reasoning.length;
-                accumulatedThinking += reasoning;
+              // Claude format
+              if (parsed.delta?.text && typeof parsed.delta.text === "string") {
+                totalContentLength += parsed.delta.text.length;
+                accumulatedContent += parsed.delta.text;
+              }
+              if (parsed.delta?.thinking && typeof parsed.delta.thinking === "string") {
+                totalContentLength += parsed.delta.thinking.length;
+                accumulatedThinking += parsed.delta.thinking;
+              }
+              // Gemini & Antigravity format
+              const cands = parsed.candidates || parsed.response?.candidates;
+              if (cands?.[0]?.content?.parts) {
+                for (const part of cands[0].content.parts) {
+                  if (part.text && typeof part.text === "string") {
+                    totalContentLength += part.text.length;
+                    if (part.thought === true) {
+                      accumulatedThinking += part.text;
+                    } else {
+                      accumulatedContent += part.text;
+                    }
+                  }
+                }
               }
 
               const extracted = extractUsage(parsed);
@@ -266,9 +284,10 @@ export function createSSEStream(options = {}) {
           accumulatedThinking += parsed.choices[0].delta.reasoning_content;
         }
         
-        // Gemini format
-        if (parsed.candidates?.[0]?.content?.parts) {
-          for (const part of parsed.candidates[0].content.parts) {
+        // Gemini & Antigravity format
+        const cands = parsed.candidates || parsed.response?.candidates;
+        if (cands?.[0]?.content?.parts) {
+          for (const part of cands[0].content.parts) {
             if (part.text && typeof part.text === "string") {
               totalContentLength += part.text.length;
               // Check if this is thinking content
