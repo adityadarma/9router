@@ -84,6 +84,27 @@
   without issuing a JWT
 - **Usage**: `/api/usage/request-details` redacts request/response payloads
 
+# v0.5.53 (2026-08-12)
+
+## Features
+- **API keys**: added optional context window limit (`contextLimit`). You can now enforce a maximum prompt size (in tokens) per API key, independent of the lifetime token quota. Exceeding this limit immediately rejects the request with a `403` status. The UI in the Endpoint page has been updated to support setting and editing this limit per key.
+
+# v0.5.52 (2026-08-12)
+
+## Features
+- **Endpoint**: track and show when each API key was last used — new `lastUsedAt`
+  column on `apiKeys`, stamped whenever a key is seen on a request. The key card
+  shows a relative label (`Last used 5m ago`, `2h ago`, `3d ago`), falls back to
+  an absolute date past a week, and reads `Never used` for keys that have never
+  served traffic. Stamped even for zero-token requests (errors, empty responses)
+  so the timestamp reflects real activity, not just billable activity
+
+## Fixes
+- **Endpoint**: always show a key's token usage. Consumed tokens were only
+  rendered when the key had a token limit configured, so unlimited keys — the
+  default — appeared to have no usage at all
+- **Sidebar**: hide the unfinished Remote and 9English entries
+
 # v0.5.50 (2026-08-05)
 
 ## Features
@@ -321,6 +342,18 @@
 - **Antigravity**: preserve Claude tool delta index (#2223) — Sutarto Jordan Chrisfivo
 - **MITM**: generate root CA on server startup (#2228) — Sutarto Jordan Chrisfivo
 
+# v0.5.16 (2026-06-30)
+
+## Features
+- **API keys**: per-key access controls. When creating a key you can set an optional token budget (prompt + completion) and an expiry date; both are also editable later from the key's edit dialog.
+  - Requests are rejected with a clear error when a key is expired (`401`) or has reached its token limit (`403`). Keys without either setting behave exactly as before (unrestricted).
+  - Limits are enforced even when `requireApiKey` is off, but only for known keys that have a limit/expiry configured — unrestricted and unknown keys keep passing through as before.
+  - `tokensUsed` is read-only: it only increases as real requests consume tokens and can never be set or overwritten through updates.
+- **API keys**: per-key allowed-models. Restrict a key to a chosen set of models/combos. The model picker reuses the same `ModelSelectModal` as the Create Combo page — models grouped by provider, a dedicated Combos section, search, provider icons, and capability badges. Combo names can be selected to restrict a key (just like combos can reference other combos). Empty list = all models allowed. Editable after creation.
+  - Model matching is tolerant of equivalent spellings: a request referencing a model by provider alias (`kr/...`), full provider id (`kiro/...`), a custom alias, or a combo name is reduced to a canonical key before comparison, so any equivalent form is accepted while different models/combos are rejected with `403`.
+- **CI**: GitHub Actions workflow that builds, lints, and runs the unit test subset on every push to the working branch and on pull requests.
+- **Docker**: build-and-push workflow targets GHCR and runs on manual dispatch or `v*` tags.
+
 # v0.5.15 (2026-06-29)
 
 ## Features
@@ -377,6 +410,16 @@
 - Antigravity: retry transient upstream failures — Sutarto Jordan Chrisfivo
 - Param-support: handle strip rules without match/drop (#1960) — Joseph Yaksich
 - Translator: resolve custom provider prefix in debug endpoint (#1083) — hamsa0x7
+
+# v0.5.10 (2026-06-24)
+
+## Features
+- **API keys**: per-key token limit and expiry. When creating a key you can optionally set a max token budget (prompt + completion) and an expiration date/time. Keys without either setting behave exactly as before (unrestricted).
+  - Requests are rejected with a clear error when a key is expired (`401`) or has reached its token limit (`403`).
+  - Limits are enforced even when `requireApiKey` is off — but only for known keys that have a limit/expiry configured, so unrestricted and unknown keys keep passing through as before.
+  - Dashboard → Endpoint → API Keys shows live usage (`used / limit`) and expiry, highlighted when exceeded.
+- **CI**: GitHub Actions workflow that builds, lints, and runs the unit test subset on every push to the `limit-token` branch and on pull requests.
+- **Docker**: build-and-push workflow now targets GHCR and runs on manual dispatch or `v*` tags.
 
 # v0.5.8 (2026-06-21)
 

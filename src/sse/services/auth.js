@@ -1,4 +1,4 @@
-import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools } from "@/lib/localDb";
+import { getProviderConnections, validateApiKey, updateProviderConnection, getSettings, getProxyPools, validateApiKeyDetailed, getApiKeyByKey, keyLimitReason, keyModelAllowed } from "@/lib/localDb";
 import { resolveConnectionProxyConfig, pickProxyPoolId } from "@/lib/network/connectionProxy";
 import { formatRetryAfter, checkFallbackError, isModelLockActive, buildModelLockUpdate, getEarliestModelLockUntil } from "open-sse/services/accountFallback.js";
 import { MAX_RATE_LIMIT_COOLDOWN_MS } from "open-sse/config/errorConfig.js";
@@ -338,4 +338,73 @@ export function extractApiKey(request) {
 export async function isValidApiKey(apiKey) {
   if (!apiKey) return false;
   return await validateApiKey(apiKey);
+}
+
+/**
+ * Validate API key with reason (limit-token feature).
+ * Returns { valid, reason } where reason is one of:
+ * "invalid" | "inactive" | "expired" | "limit" | null
+ */
+export async function checkApiKey(apiKey) {
+  if (!apiKey) return { valid: false, reason: "invalid" };
+  const { valid, reason } = await validateApiKeyDetailed(apiKey);
+  return { valid, reason };
+}
+
+/**
+ * Limit-token check ONLY. Used when requireApiKey is OFF: an unknown or
+ * paused key must still pass through exactly like before — we only block
+ * when a known key has a *configured* expiry/token-limit that's exceeded.
+ * Returns { ok, reason } where reason is "expired" | "limit" | null.
+ */
+export async function checkApiKeyLimits(apiKey) {
+  if (!apiKey) return { ok: true, reason: null };
+  const key = await getApiKeyByKey(apiKey);
+  if (!key) return { ok: true, reason: null }; // unknown key → free pass (as before)
+  const reason = keyLimitReason(key);
+  return { ok: !reason, reason };
+}
+
+/**
+ * Limit-context check ONLY. Used to verify a request's prompt size doesn't
+ * exceed the API key's configured contextLimit.
+ * Returns { ok, limit } where limit is the context limit or null.
+ */
+export async function checkApiKeyContextLimit(apiKey, promptTokens) {
+  if (!apiKey) return { ok: true, limit: null };
+  const key = await getApiKeyByKey(apiKey);
+  if (!key || !key.contextLimit) return { ok: true, limit: null };
+  return {
+    ok: promptTokens <= key.contextLimit,
+    limit: key.contextLimit
+  };
+}
+
+/**
+ * Per-key allowed-models check. Returns { ok } — true when the key may use the
+ * requested model. Unknown keys, missing keys, or keys with an empty
+ * allowedModels list are unrestricted (ok: true), so behavior is unchanged
+ * unless a key explicitly restricts its models.
+ *
+ * Matching is tolerant of equivalent spellings: a client may reference a model
+ * by provider alias ("kr/x"), full provider id ("kiro/x"), a custom alias, or a
+ * combo name. Both the requested model and each allowed entry are reduced to a
+ * canonical key before comparison, so any equivalent form is accepted.
+ */
+export async function checkApiKeyModel(apiKey, modelStr) {
+  if (!apiKey || !modelStr) return { ok: true };
+  const key = await getApiKeyByKey(apiKey);
+  if (!key) return { ok: true };
+  const allowed = Array.isArray(key.allowedModels) ? key.allowedModels : [];
+  if (allowed.length === 0) return { ok: true };
+
+  // Fast path: exact string match against the stored list.
+  if (allowed.includes(modelStr)) return { ok: true };
+
+  // Tolerant path: compare canonical keys so equivalent spellings match.
+  const { canonicalModelKey } = await import("./model.js");
+  const requested = await canonicalModelKey(modelStr);
+  if (!requested) return { ok: keyModelAllowed(key, modelStr) };
+  const allowedKeys = await Promise.all(allowed.map((m) => canonicalModelKey(m)));
+  return { ok: allowedKeys.includes(requested) };
 }
