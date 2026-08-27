@@ -1,3 +1,12 @@
+# v0.5.57 (2026-08-27)
+
+## Features
+- **Usage**: link `usageHistory` rows to their `requestDetails` payload via a
+  new `requestDetailId` column (soft-FK, indexed, nullable — SQLite can't
+  retroactively add a real `FOREIGN KEY` to an existing table). The id is
+  generated once per request and shared between both writes, including across
+  the streaming placeholder/update pair
+
 # v0.5.55 (2026-08-14)
 
 ## Features

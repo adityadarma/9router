@@ -13,6 +13,13 @@ const OPTIONAL_PARAMS = [
   "user", "parallel_tool_calls"
 ];
 
+export function generateDetailId(model) {
+  const timestamp = new Date().toISOString();
+  const random = Math.random().toString(36).substring(2, 8);
+  const modelPart = model ? model.replace(/[^a-zA-Z0-9-]/g, "-") : "unknown";
+  return `${timestamp}-${random}-${modelPart}`;
+}
+
 export function extractRequestConfig(body, stream) {
   const config = { messages: body.messages || [], model: body.model, stream };
   for (const param of OPTIONAL_PARAMS) {
@@ -94,7 +101,7 @@ export function formatDoneLine({ usage, latency }) {
   return `DONE ${latency?.total ?? 0}ms${ttftStr} · ${inStr} · OUT ${outTok}`;
 }
 
-export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, label = "USAGE", silent = false }) {
+export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, endpoint, requestDetailId, label = "USAGE", silent = false }) {
   if (!tokens || typeof tokens !== "object") return;
 
   const inTokens = tokens.input_tokens ?? tokens.prompt_tokens ?? 0;
@@ -122,6 +129,7 @@ export function saveUsageStats({ provider, model, tokens, connectionId, apiKey, 
     timestamp: new Date().toISOString(),
     connectionId: connectionId || undefined,
     apiKey: apiKey || undefined,
-    endpoint: endpoint || null
+    endpoint: endpoint || null,
+    requestDetailId: requestDetailId || null
   }).catch(() => {});
 }
