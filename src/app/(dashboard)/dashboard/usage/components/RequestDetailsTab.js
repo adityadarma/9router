@@ -112,6 +112,7 @@ export default function RequestDetailsTab() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [providers, setProviders] = useState([]);
   const [providerNameCache, setProviderNameCache] = useState(null);
+  const [totals, setTotals] = useState(null);
   const [filters, setFilters] = useState({
     provider: "",
     startDate: "",
@@ -147,6 +148,7 @@ export default function RequestDetailsTab() {
 
       setDetails(data.details || []);
       setPagination(prev => ({ ...prev, ...data.pagination }));
+      setTotals(data.totals || null);
     } catch (error) {
       console.error("Failed to fetch request details:", error);
     } finally {
@@ -246,6 +248,33 @@ export default function RequestDetailsTab() {
           </div>
         </div>
       </Card>
+
+      {totals && (
+        <Card padding="md">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Requests</span>
+              <span className="font-mono text-lg text-text-main">{totals.requestCount.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Input Tokens</span>
+              <span className="font-mono text-lg text-text-main">{totals.inputTokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Cached</span>
+              <span className="font-mono text-lg text-text-main">{totals.cachedTokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Cache Creation</span>
+              <span className="font-mono text-lg text-text-main">{totals.cacheCreationTokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Output Tokens</span>
+              <span className="font-mono text-lg text-text-main">{totals.outputTokens.toLocaleString()}</span>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <Card padding="none">
         <div className="overflow-x-auto">

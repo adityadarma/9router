@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getRequestDetails } from "@/lib/usageDb";
+import { getRequestDetails, getRequestDetailsTotals } from "@/lib/usageDb";
 
 /**
  * GET /api/usage/request-details
@@ -48,6 +48,11 @@ export async function GET(request) {
     
     const result = await getRequestDetails(filter);
 
+    const totalsFilter = { ...filter };
+    delete totalsFilter.page;
+    delete totalsFilter.pageSize;
+    const totals = await getRequestDetailsTotals(totalsFilter);
+
     // Redact conversation payloads: the stored details include full request
     // bodies (user prompts, tool calls) and provider responses.
     // NOTE: Redaction has been disabled to allow viewing payloads in the dashboard.
@@ -63,7 +68,7 @@ export async function GET(request) {
     });
     */
 
-    return NextResponse.json({ ...result, details: result.details || [] });
+    return NextResponse.json({ ...result, details: result.details || [], totals });
   } catch (error) {
     console.error("[API] Failed to get request details:", error);
     return NextResponse.json(

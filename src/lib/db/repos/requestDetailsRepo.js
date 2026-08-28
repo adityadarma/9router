@@ -159,8 +159,7 @@ export async function saveRequestDetail(detail) {
   }
 }
 
-export async function getRequestDetails(filter = {}) {
-  const db = await getAdapter();
+function buildFilterWhere(filter = {}) {
   const conds = [];
   const params = [];
 
@@ -172,6 +171,13 @@ export async function getRequestDetails(filter = {}) {
   if (filter.endDate) { conds.push("timestamp <= ?"); params.push(new Date(filter.endDate).toISOString()); }
 
   const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  return { where, params };
+}
+
+export async function getRequestDetails(filter = {}) {
+  const db = await getAdapter();
+  const { where, params } = buildFilterWhere(filter);
+
   const cntRow = db.get(`SELECT COUNT(*) as c FROM requestDetails ${where}`, params);
   const totalItems = cntRow ? cntRow.c : 0;
 
@@ -190,6 +196,34 @@ export async function getRequestDetails(filter = {}) {
     details,
     pagination: { page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
   };
+}
+
+function getCachedTokensFromTokens(tokens) {
+  return tokens?.cached_tokens || tokens?.cache_read_input_tokens || 0;
+}
+
+function getInputTokensFromTokens(tokens) {
+  const prompt = tokens?.prompt_tokens || tokens?.input_tokens || 0;
+  const cache = getCachedTokensFromTokens(tokens);
+  return prompt < cache ? cache : prompt;
+}
+
+export async function getRequestDetailsTotals(filter = {}) {
+  const db = await getAdapter();
+  const { where, params } = buildFilterWhere(filter);
+
+  const rows = db.all(`SELECT data FROM requestDetails ${where}`, params);
+
+  const totals = { inputTokens: 0, cachedTokens: 0, cacheCreationTokens: 0, outputTokens: 0, requestCount: rows.length };
+  for (const r of rows) {
+    const detail = parseJson(r.data, {});
+    const tokens = detail.tokens || {};
+    totals.inputTokens += getInputTokensFromTokens(tokens);
+    totals.cachedTokens += getCachedTokensFromTokens(tokens);
+    totals.cacheCreationTokens += tokens.cache_creation_input_tokens || 0;
+    totals.outputTokens += tokens.completion_tokens || 0;
+  }
+  return totals;
 }
 
 export async function getDistinctProviders() {

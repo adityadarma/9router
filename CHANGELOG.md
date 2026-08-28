@@ -1,6 +1,10 @@
 # v0.5.59 (2026-08-28)
 
 ## Features
+- **Usage**: Details tab on the Usage & Analytics page now shows a totals
+  summary (requests, input/cached/cache-creation/output tokens) for the
+  current filter, backed by a new `getRequestDetailsTotals` query that
+  aggregates across all matching rows, not just the current page
 - **Usage**: link `usageHistory` rows to their `requestDetails` payload via a
   new `requestDetailId` column (soft-FK, indexed, nullable — SQLite can't
   retroactively add a real `FOREIGN KEY` to an existing table). The id is
