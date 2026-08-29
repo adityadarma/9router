@@ -208,6 +208,17 @@ function getInputTokensFromTokens(tokens) {
   return prompt < cache ? cache : prompt;
 }
 
+function getOutputTokensFromTokens(tokens) {
+  const completion = tokens?.completion_tokens || tokens?.output_tokens || 0;
+  // Two stored shapes differ on whether reasoning is already counted:
+  // - nested completion_tokens_details.reasoning_tokens (OpenAI shape) is
+  //   INSIDE completion_tokens — adding it would double-count.
+  // - flat reasoning_tokens comes from Gemini's thoughtsTokenCount, which
+  //   candidatesTokenCount excludes — so it must be added.
+  if (tokens?.completion_tokens_details?.reasoning_tokens !== undefined) return completion;
+  return completion + (tokens?.reasoning_tokens || 0);
+}
+
 export async function getRequestDetailsTotals(filter = {}) {
   const db = await getAdapter();
   const { where, params } = buildFilterWhere(filter);
@@ -221,7 +232,7 @@ export async function getRequestDetailsTotals(filter = {}) {
     totals.inputTokens += getInputTokensFromTokens(tokens);
     totals.cachedTokens += getCachedTokensFromTokens(tokens);
     totals.cacheCreationTokens += tokens.cache_creation_input_tokens || 0;
-    totals.outputTokens += tokens.completion_tokens || 0;
+    totals.outputTokens += getOutputTokensFromTokens(tokens);
   }
   return totals;
 }
