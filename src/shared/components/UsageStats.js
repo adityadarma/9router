@@ -303,6 +303,8 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
   const [periodLocal, setPeriodLocal] = useState("today");
   const isInitialLoad = useRef(true);
   const hasLoadedStats = useRef(false);
+  const refreshRef = useRef(null);
+  const lastSeenSignal = useRef(null);
   const period = periodProp ?? periodLocal;
   const setPeriod = setPeriodProp ?? setPeriodLocal;
 
@@ -338,30 +340,46 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       .catch(() => {});
   }, []);
 
-  // Fetch filtered stats via REST when period changes
-  useEffect(() => {
-    // First load: show full spinner; subsequent: show subtle fetching indicator
-    if (isInitialLoad.current) {
-      isInitialLoad.current = false;
-      setLoading(true);
-    } else {
-      setFetching(true);
+  // Fetch period-filtered totals via REST. `silent` skips the loading indicators
+  // so SSE-triggered refreshes don't flash the cards.
+  const refreshStats = useCallback((silent = false) => {
+    if (!silent) {
+      // First load: show full spinner; subsequent: show subtle fetching indicator
+      if (isInitialLoad.current) {
+        isInitialLoad.current = false;
+        setLoading(true);
+      } else {
+        setFetching(true);
+      }
     }
 
-    fetch(`/api/usage/stats?period=${period}`)
+    return fetch(`/api/usage/stats?period=${period}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data) {
           hasLoadedStats.current = true;
-          setStats((prev) => ({ ...prev, ...data }));
+          // Drop live-only fields — SSE owns those and is fresher than this response.
+          const { activeRequests, recentRequests, errorProvider, pending, ...totals } = data;
+          setStats((prev) => (prev ? { ...prev, ...totals } : data));
         }
       })
       .catch(() => {})
       .finally(() => {
-        setLoading(false);
-        setFetching(false);
+        if (!silent) {
+          setLoading(false);
+          setFetching(false);
+        }
       });
   }, [period]);
+
+  // Keep a stable handle so the SSE effect can refresh without resubscribing.
+  useEffect(() => {
+    refreshRef.current = refreshStats;
+  }, [refreshStats]);
+
+  useEffect(() => {
+    refreshStats();
+  }, [refreshStats]);
 
   // SSE connection - real-time updates for activeRequests + recentRequests only
   useEffect(() => {
@@ -370,7 +388,8 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        // Always merge only real-time fields, never overwrite full stats from REST
+        // Always merge only real-time fields, never overwrite full stats from REST:
+        // the stream is period-"all", so its totals don't match the selected period.
         setStats((prev) => {
           if (!prev) return prev;
           return {
@@ -382,6 +401,17 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
           };
         });
         if (hasLoadedStats.current) setLoading(false);
+
+        // A finished request changes the totals too. Detect it from the live feed
+        // and silently refetch the period-filtered numbers so the overview cards
+        // move together with Recent Requests instead of waiting for a reload.
+        const signal = `${data.totalRequests ?? ""}|${data.recentRequests?.[0]?.timestamp ?? ""}`;
+        if (lastSeenSignal.current === null) {
+          lastSeenSignal.current = signal;
+        } else if (lastSeenSignal.current !== signal) {
+          lastSeenSignal.current = signal;
+          if (hasLoadedStats.current) refreshRef.current?.(true);
+        }
       } catch (err) {
         console.error("[SSE CLIENT] parse error:", err);
       }
