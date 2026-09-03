@@ -153,7 +153,7 @@ export function createSSEStream(options = {}) {
 
     if (onStreamComplete) {
       onStreamComplete({
-        content: accumulatedContent,
+        content: contentForLogging(),
         thinking: accumulatedThinking
       }, finalUsage, ttftAt);
     }
@@ -488,12 +488,6 @@ export function createSSEStream(options = {}) {
           }
 
           finalizeStream();
-          if (onStreamComplete) {
-            onStreamComplete({
-              content: contentForLogging(),
-              thinking: accumulatedThinking
-            }, usage, ttftAt);
-          }
           return;
         }
 
@@ -569,22 +563,6 @@ export function createSSEStream(options = {}) {
         }
 
         finalizeStream();
-        if (!hasValidUsage(state?.usage) && totalContentLength > 0) {
-          state.usage = estimateUsage(body, totalContentLength, sourceFormat);
-        }
-
-        if (hasValidUsage(state?.usage)) {
-          logUsage(state.provider || targetFormat, state.usage, model, connectionId, apiKey);
-        } else {
-          appendRequestLog({ model, provider, connectionId, tokens: null, status: "200 OK" }).catch(() => { });
-        }
-        
-        if (onStreamComplete) {
-          onStreamComplete({
-            content: contentForLogging(),
-            thinking: accumulatedThinking
-          }, state?.usage, ttftAt);
-        }
       } catch (error) {
         console.log("Error in flush:", error);
         finalizeStream();
