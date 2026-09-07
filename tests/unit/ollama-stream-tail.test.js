@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { FORMATS } from "../../open-sse/translator/formats.js";
-import { createSSETransformStreamWithLogger } from "../../open-sse/utils/stream.js";
+import { createPassthroughStreamWithLogger, createSSETransformStreamWithLogger } from "../../open-sse/utils/stream.js";
 
 // Ollama streams NDJSON — one raw JSON object per line, no "data: " prefix.
 // Whatever arrives without a closing newline stays in the line buffer and is
@@ -92,5 +92,64 @@ describe("SSE providers keep their sentinel handling", () => {
     expect(text).toContain('"content":"hi"');
     // The sentinel is a framing marker, not a chunk — it must not be translated.
     expect(text).not.toContain('"done":true');
+  });
+});
+
+describe("OpenAI-compatible Responses events in passthrough streams", () => {
+  it("records output_text deltas in request details", async () => {
+    const encoder = new TextEncoder();
+    let completed;
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode([
+          "event: response.output_text.delta",
+          'data: {"type":"response.output_text.delta","delta":"hello"}',
+          "",
+          "event: response.output_text.delta",
+          'data: {"type":"response.output_text.delta","delta":" world"}',
+          "",
+        ].join("\n")));
+        controller.close();
+      },
+    });
+
+    const output = stream.pipeThrough(createPassthroughStreamWithLogger(
+      "openai", null, "gpt-5.6-terra", null, null,
+      (content) => { completed = content; },
+    ));
+    const reader = output.getReader();
+    while (!(await reader.read()).done) { /* drain stream so flush runs */ }
+
+    expect(completed).toMatchObject({ content: "hello world" });
+  });
+
+  it("records output_text deltas when translating Responses API to Chat Completions", async () => {
+    const encoder = new TextEncoder();
+    let completed;
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode([
+          "event: response.output_text.delta",
+          'data: {"type":"response.output_text.delta","delta":"hello"}',
+          "",
+          "event: response.output_text.delta",
+          'data: {"type":"response.output_text.delta","delta":" world"}',
+          "",
+          "event: response.completed",
+          'data: {"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":2}}}',
+          "",
+        ].join("\n")));
+        controller.close();
+      },
+    });
+
+    const output = stream.pipeThrough(createSSETransformStreamWithLogger(
+      FORMATS.OPENAI_RESPONSES, FORMATS.OPENAI, "codex", null, null,
+      "gpt-5.6-terra", null, null, (content) => { completed = content; },
+    ));
+    const reader = output.getReader();
+    while (!(await reader.read()).done) { /* drain stream so flush runs */ }
+
+    expect(completed).toMatchObject({ content: "hello world" });
   });
 });

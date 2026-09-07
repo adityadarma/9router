@@ -66,6 +66,7 @@ export function createSSEStream(options = {}) {
   let totalContentLength = 0;
   let accumulatedContent = "";
   let accumulatedThinking = "";
+  let openAIResponsesTextSawDelta = false;
   // Tool calls carry the actual output for tool-only turns (e.g. Kiro function
   // calls). Without this, a turn that never emits plain text/thinking left
   // accumulatedContent empty and the request-detail log fell back to
@@ -106,6 +107,30 @@ export function createSSEStream(options = {}) {
       name: functionCall.name || "",
       arguments: JSON.stringify(functionCall.args || {})
     });
+  }
+
+  // Some OpenAI-compatible gateways emit Responses API events even when the
+  // request used /chat/completions. Preserve their passthrough payload while
+  // still capturing text for the request-detail history.
+  function accumulateOpenAIResponsesContent(eventName, parsed) {
+    const eventType = parsed?.type || eventName;
+    if (eventType === "response.output_text.delta" && typeof parsed?.delta === "string") {
+      totalContentLength += parsed.delta.length;
+      accumulatedContent += parsed.delta;
+      openAIResponsesTextSawDelta = true;
+      return;
+    }
+
+    // Gateways that omit deltas sometimes send the complete text with the
+    // output item. Do not duplicate content when deltas were already seen.
+    if (eventType === "response.output_item.done" && !openAIResponsesTextSawDelta) {
+      for (const part of parsed?.item?.content || []) {
+        if (part?.type === "output_text" && typeof part.text === "string") {
+          totalContentLength += part.text.length;
+          accumulatedContent += part.text;
+        }
+      }
+    }
   }
 
   function toolCallsSummaryText() {
@@ -180,8 +205,9 @@ export function createSSEStream(options = {}) {
           }
         }
 
-        // Capture Responses API event name to preserve framing in same-format passthrough
-        if (mode === STREAM_MODE.TRANSLATE && targetFormat === FORMATS.OPENAI_RESPONSES && trimmed.startsWith("event:")) {
+        // Capture Responses API event name for same-format framing and for
+        // logging responses sent by OpenAI-compatible passthrough providers.
+        if (trimmed.startsWith("event:")) {
           currentOpenAIResponsesEvent = trimmed.slice(6).trim();
         }
 
@@ -242,9 +268,10 @@ export function createSSEStream(options = {}) {
                 totalContentLength += parsed.choices[0].delta.reasoning_content.length;
                 accumulatedThinking += parsed.choices[0].delta.reasoning_content;
               }
-              if (Array.isArray(parsed.choices?.[0]?.delta?.tool_calls) && parsed.choices[0].delta.tool_calls.length > 0) {
-                accumulateOpenAIToolCalls(parsed.choices[0].delta.tool_calls);
-              }
+               if (Array.isArray(parsed.choices?.[0]?.delta?.tool_calls) && parsed.choices[0].delta.tool_calls.length > 0) {
+                 accumulateOpenAIToolCalls(parsed.choices[0].delta.tool_calls);
+               }
+               accumulateOpenAIResponsesContent(currentOpenAIResponsesEvent, parsed);
               // Claude format
               if (parsed.delta?.text && typeof parsed.delta.text === "string") {
                 totalContentLength += parsed.delta.text.length;
@@ -322,6 +349,11 @@ export function createSSEStream(options = {}) {
 
         const parsed = parseSSELine(trimmed, targetFormat);
         if (!parsed) continue;
+
+        // Codex speaks the Responses API and is translated to Chat Completions
+        // for standard OpenAI clients. Capture its text before translation so
+        // the request-detail history receives the same answer as the client.
+        accumulateOpenAIResponsesContent(currentOpenAIResponsesEvent, parsed);
 
         // Responses API same-format passthrough: preserve event framing + track terminal state
         const isOpenAIResponsesStream = targetFormat === FORMATS.OPENAI_RESPONSES;
