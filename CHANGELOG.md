@@ -1,3 +1,8 @@
+# v0.5.70 (2026-09-07)
+
+## Fixes
+- **Codex / Recent Requests**: capture Responses API `response.output_text.delta` events before translating them to Chat Completions, so streamed Codex answers appear in the dashboard instead of `[Empty streaming response]`
+
 # v0.5.69 (2026-09-05)
 
 ## Features
