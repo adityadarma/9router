@@ -72,6 +72,7 @@ export function createSSEStream(options = {}) {
   // accumulatedContent empty and the request-detail log fell back to
   // "[Empty streaming response]" despite non-zero completion tokens.
   const openAIToolCallAcc = new Map(); // index -> { id, name, arguments }
+  const openAIResponsesToolCalls = new Map(); // item id -> { id, name, arguments, hasArgumentDeltas }
   const claudeToolBlocks = new Map();  // block index -> { id, name, arguments }
   const geminiFunctionCalls = [];      // Gemini/Antigravity/Vertex functionCall parts are always complete (non-fragmented)
 
@@ -83,6 +84,47 @@ export function createSSEStream(options = {}) {
       if (typeof tc.function?.name === "string") entry.name += tc.function.name;
       if (typeof tc.function?.arguments === "string") entry.arguments += tc.function.arguments;
       openAIToolCallAcc.set(idx, entry);
+    }
+  }
+
+  // Responses API tool calls are not represented as Chat Completions
+  // `delta.tool_calls`. Track their added/delta/done event sequence so a
+  // tool-only Codex turn remains visible in request-detail history.
+  function accumulateOpenAIResponsesToolCall(eventName, parsed) {
+    const eventType = parsed?.type || eventName;
+    const item = parsed?.item;
+    const isToolItem = item?.type === "function_call" || item?.type === "custom_tool_call";
+
+    if (eventType === "response.output_item.added" && isToolItem) {
+      const key = item.id || parsed.item_id || item.call_id || `${parsed.output_index ?? openAIResponsesToolCalls.size}`;
+      openAIResponsesToolCalls.set(key, {
+        id: item.call_id || item.id || key,
+        name: item.name || "",
+        arguments: typeof item.arguments === "string" ? item.arguments : (typeof item.input === "string" ? item.input : ""),
+        hasArgumentDeltas: false,
+      });
+      return;
+    }
+
+    if (eventType === "response.function_call_arguments.delta" || eventType === "response.custom_tool_call_input.delta") {
+      const key = parsed.item_id || `${parsed.output_index ?? Math.max(0, openAIResponsesToolCalls.size - 1)}`;
+      const call = openAIResponsesToolCalls.get(key) || [...openAIResponsesToolCalls.values()].at(-1);
+      if (call && typeof parsed.delta === "string") {
+        call.arguments += parsed.delta;
+        call.hasArgumentDeltas = true;
+      }
+      return;
+    }
+
+    if (eventType === "response.output_item.done" && isToolItem) {
+      const key = item.id || parsed.item_id || item.call_id || `${parsed.output_index ?? Math.max(0, openAIResponsesToolCalls.size - 1)}`;
+      const call = openAIResponsesToolCalls.get(key) || [...openAIResponsesToolCalls.values()].at(-1);
+      if (!call) return;
+      if (item.name) call.name = item.name;
+      if (!call.hasArgumentDeltas) {
+        const argumentsValue = item.arguments ?? item.input;
+        if (typeof argumentsValue === "string") call.arguments = argumentsValue;
+      }
     }
   }
 
@@ -134,7 +176,7 @@ export function createSSEStream(options = {}) {
   }
 
   function toolCallsSummaryText() {
-    const entries = [...openAIToolCallAcc.values(), ...claudeToolBlocks.values(), ...geminiFunctionCalls];
+    const entries = [...openAIToolCallAcc.values(), ...openAIResponsesToolCalls.values(), ...claudeToolBlocks.values(), ...geminiFunctionCalls];
     if (entries.length === 0) return "";
     return entries.map(e => `[tool_call] ${e.name || "(unnamed)"}(${e.arguments})`).join("\n");
   }
@@ -272,6 +314,7 @@ export function createSSEStream(options = {}) {
                  accumulateOpenAIToolCalls(parsed.choices[0].delta.tool_calls);
                }
                accumulateOpenAIResponsesContent(currentOpenAIResponsesEvent, parsed);
+               accumulateOpenAIResponsesToolCall(currentOpenAIResponsesEvent, parsed);
               // Claude format
               if (parsed.delta?.text && typeof parsed.delta.text === "string") {
                 totalContentLength += parsed.delta.text.length;
@@ -354,6 +397,7 @@ export function createSSEStream(options = {}) {
         // for standard OpenAI clients. Capture its text before translation so
         // the request-detail history receives the same answer as the client.
         accumulateOpenAIResponsesContent(currentOpenAIResponsesEvent, parsed);
+        accumulateOpenAIResponsesToolCall(currentOpenAIResponsesEvent, parsed);
 
         // Responses API same-format passthrough: preserve event framing + track terminal state
         const isOpenAIResponsesStream = targetFormat === FORMATS.OPENAI_RESPONSES;

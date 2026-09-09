@@ -152,4 +152,37 @@ describe("OpenAI-compatible Responses events in passthrough streams", () => {
 
     expect(completed).toMatchObject({ content: "hello world" });
   });
+
+  it("records tool-only Codex Responses API turns in request details", async () => {
+    const encoder = new TextEncoder();
+    let completed;
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode([
+          "event: response.output_item.added",
+          'data: {"type":"response.output_item.added","output_index":0,"item":{"id":"fc_cain","type":"function_call","call_id":"call_cain","name":"tool_cain"}}',
+          "",
+          "event: response.function_call_arguments.delta",
+          'data: {"type":"response.function_call_arguments.delta","item_id":"fc_cain","delta":"{\\"path\\":\\"src\\"}"}',
+          "",
+          "event: response.output_item.done",
+          'data: {"type":"response.output_item.done","output_index":0,"item":{"id":"fc_cain","type":"function_call","call_id":"call_cain","name":"tool_cain"}}',
+          "",
+          "event: response.completed",
+          'data: {"type":"response.completed","response":{"usage":{"input_tokens":2,"output_tokens":2}}}',
+          "",
+        ].join("\n")));
+        controller.close();
+      },
+    });
+
+    const output = stream.pipeThrough(createSSETransformStreamWithLogger(
+      FORMATS.OPENAI_RESPONSES, FORMATS.OPENAI, "codex", null, null,
+      "gpt-5.6-terra", null, null, (content) => { completed = content; },
+    ));
+    const reader = output.getReader();
+    while (!(await reader.read()).done) { /* drain stream so flush runs */ }
+
+    expect(completed).toMatchObject({ content: '[tool_call] tool_cain({"path":"src"})' });
+  });
 });
