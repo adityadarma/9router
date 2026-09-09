@@ -1,3 +1,8 @@
+# v0.5.71 (2026-09-09)
+
+## Fixes
+- **Codex / Recent Requests**: record Responses API function and custom tool calls, including streamed arguments, so tool-only turns such as `tool_cain` no longer appear as `[Empty streaming response]`
+
 # v0.5.70 (2026-09-07)
 
 ## Fixes
