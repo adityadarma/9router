@@ -79,7 +79,7 @@ jobs:
 
       - name: Install test dependencies
         working-directory: tests
-        run: npm install
+        run: npx --yes npm@11.16.0 install
 
       # Exclude live/cloud suites that require network access or provider
       # credentials and would be flaky in CI.
