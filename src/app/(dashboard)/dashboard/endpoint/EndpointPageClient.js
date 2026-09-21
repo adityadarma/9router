@@ -38,7 +38,6 @@ export default function APIPageClient({ machineId }) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyTokenLimit, setNewKeyTokenLimit] = useState("");
-  const [newKeyContextLimit, setNewKeyContextLimit] = useState("");
   const [newKeyExpiresAt, setNewKeyExpiresAt] = useState("");
   const [newKeyAllowedModels, setNewKeyAllowedModels] = useState([]);
   const [createdKey, setCreatedKey] = useState(null);
@@ -51,11 +50,10 @@ export default function APIPageClient({ machineId }) {
   const [showCreateModelSelect, setShowCreateModelSelect] = useState(false);
   const [showEditModelSelect, setShowEditModelSelect] = useState(false);
 
-  // Edit modal state (edit allowed models + token limit + context limit + expiry)
+  // Edit modal state (edit allowed models + token limit + expiry)
   const [editModelsKey, setEditModelsKey] = useState(null);
   const [editModelsList, setEditModelsList] = useState([]);
   const [editTokenLimit, setEditTokenLimit] = useState("");
-  const [editContextLimit, setEditContextLimit] = useState("");
   const [editExpiresAt, setEditExpiresAt] = useState("");
   const [savingModels, setSavingModels] = useState(false);
 
@@ -680,8 +678,6 @@ export default function APIPageClient({ machineId }) {
       const payload = { name: newKeyName };
       const limitNum = parseInt(newKeyTokenLimit, 10);
       if (Number.isFinite(limitNum) && limitNum > 0) payload.tokenLimit = limitNum;
-      const contextLimitNum = parseInt(newKeyContextLimit, 10);
-      if (Number.isFinite(contextLimitNum) && contextLimitNum > 0) payload.contextLimit = contextLimitNum;
       // newKeyExpiresAt is a date-only value ("YYYY-MM-DD"); expire at the end
       // of that day in local time so the key stays valid through the whole date.
       if (newKeyExpiresAt) {
@@ -702,7 +698,6 @@ export default function APIPageClient({ machineId }) {
         await fetchData();
           setNewKeyName("");
           setNewKeyTokenLimit("");
-          setNewKeyContextLimit("");
           setNewKeyExpiresAt("");
         setNewKeyAllowedModels([]);
         setShowAddModal(false);
@@ -717,7 +712,6 @@ export default function APIPageClient({ machineId }) {
     setEditModelsKey(key);
     setEditModelsList(Array.isArray(key.allowedModels) ? key.allowedModels : []);
     setEditTokenLimit(key.tokenLimit ? String(key.tokenLimit) : "");
-    setEditContextLimit(key.contextLimit ? String(key.contextLimit) : "");
     // Convert stored ISO timestamp back to a local YYYY-MM-DD for the date input.
     if (key.expiresAt) {
       const d = new Date(key.expiresAt);
@@ -732,7 +726,6 @@ export default function APIPageClient({ machineId }) {
     setEditModelsKey(null);
     setEditModelsList([]);
     setEditTokenLimit("");
-    setEditContextLimit("");
     setEditExpiresAt("");
   };
 
@@ -744,9 +737,6 @@ export default function APIPageClient({ machineId }) {
       const limitNum = parseInt(editTokenLimit, 10);
       // Empty field → null (unlimited); otherwise the parsed positive integer.
       payload.tokenLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : null;
-      
-      const contextLimitNum = parseInt(editContextLimit, 10);
-      payload.contextLimit = Number.isFinite(contextLimitNum) && contextLimitNum > 0 ? contextLimitNum : null;
 
       // Empty date → null (never); otherwise end-of-day local time.
       if (editExpiresAt) {
@@ -768,7 +758,6 @@ export default function APIPageClient({ machineId }) {
           ...x,
           allowedModels: k.allowedModels ?? editModelsList,
           tokenLimit: k.tokenLimit ?? payload.tokenLimit,
-          contextLimit: k.contextLimit ?? payload.contextLimit,
           expiresAt: k.expiresAt ?? payload.expiresAt,
         } : x));
         closeEditModels();
@@ -1199,11 +1188,6 @@ export default function APIPageClient({ machineId }) {
                         {(key.tokensUsed || 0).toLocaleString()} tokens used
                       </span>
                     )}
-                    {key.contextLimit ? (
-                      <span className="text-xs text-text-muted ml-2 border-l border-border pl-2">
-                        Max {key.contextLimit.toLocaleString()} ctx
-                      </span>
-                    ) : null}
                     {key.expiresAt ? (
                       <span
                         className={`text-xs ${
@@ -1282,7 +1266,6 @@ export default function APIPageClient({ machineId }) {
           setShowAddModal(false);
           setNewKeyName("");
           setNewKeyTokenLimit("");
-          setNewKeyContextLimit("");
           setNewKeyExpiresAt("");
           setNewKeyAllowedModels([]);
         }}
@@ -1301,14 +1284,6 @@ export default function APIPageClient({ machineId }) {
             value={newKeyTokenLimit}
             onChange={(e) => setNewKeyTokenLimit(e.target.value)}
             placeholder="e.g. 1000000 — leave empty for unlimited"
-          />
-          <Input
-            label="Context Window Limit (optional)"
-            type="number"
-            min="0"
-            value={newKeyContextLimit}
-            onChange={(e) => setNewKeyContextLimit(e.target.value)}
-            placeholder="e.g. 128000 — max input tokens per request"
           />
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-text-main">Expires At (optional)</label>
@@ -1437,14 +1412,6 @@ export default function APIPageClient({ machineId }) {
             value={editTokenLimit}
             onChange={(e) => setEditTokenLimit(e.target.value)}
             placeholder="e.g. 1000000 — leave empty for unlimited"
-          />
-          <Input
-            label="Context Window Limit (optional)"
-            type="number"
-            min="0"
-            value={editContextLimit}
-            onChange={(e) => setEditContextLimit(e.target.value)}
-            placeholder="e.g. 128000 — max input tokens per request"
           />
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-text-main">Expires At (optional)</label>

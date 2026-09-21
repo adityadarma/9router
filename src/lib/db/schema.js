@@ -84,7 +84,6 @@ export const TABLES = {
       isActive: "INTEGER DEFAULT 1",
       createdAt: "TEXT NOT NULL",
       tokenLimit: "INTEGER",
-      contextLimit: "INTEGER",
       expiresAt: "TEXT",
       tokensUsed: "INTEGER DEFAULT 0",
       allowedModels: "TEXT",
