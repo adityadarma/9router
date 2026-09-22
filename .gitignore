@@ -68,6 +68,7 @@ package-lock.json
 README1.md
 deploy*.sh
 ecosystem.config.*
+AGENTS.md
 
 scripts/agSniffer/*
 gitbooks/*
@@ -86,6 +87,7 @@ graphify-out/*
 .codegraph/
 .PR/
 .next-analyze/*
+.opencode
 
 # Kiro local workspace state
 .kiro/

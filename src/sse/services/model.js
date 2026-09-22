@@ -92,3 +92,29 @@ export async function getComboModels(modelStr) {
   }
   return null;
 }
+
+/**
+ * Reduce any model reference to a canonical key so that different spellings of
+ * the same target compare equal. Handles:
+ *   - provider alias vs full provider id  ("kr/x" and "kiro/x" → "kiro/x")
+ *   - custom model aliases (resolved to their provider/model)
+ *   - combo names                          ("my-combo" → "combo:my-combo")
+ * Falls back to the raw lowercased string if resolution fails.
+ */
+export async function canonicalModelKey(modelStr) {
+  if (!modelStr || typeof modelStr !== "string") return null;
+  const raw = modelStr.trim();
+  if (!raw) return null;
+  try {
+    const info = await getModelInfo(raw);
+    if (info) {
+      // provider === null is the signal for a combo (see getModelInfo above)
+      if (info.provider == null) return `combo:${info.model}`;
+      if (info.provider && info.model) return `${info.provider}/${info.model}`;
+    }
+  } catch {
+    /* fall through to raw */
+  }
+  return `raw:${raw.toLowerCase()}`;
+}
+

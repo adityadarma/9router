@@ -3,7 +3,7 @@
 // pre-change safety backup in migrate.js: when the stored version is lower,
 // one lightweight DB backup is taken before applying schema changes. Forgetting
 // to bump only skips that backup — it does NOT break the additive auto-sync.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 4;
 
 export const PRAGMA_SQL = `
 PRAGMA journal_mode = WAL;
@@ -83,6 +83,12 @@ export const TABLES = {
       machineId: "TEXT",
       isActive: "INTEGER DEFAULT 1",
       createdAt: "TEXT NOT NULL",
+      tokenLimit: "INTEGER",
+      expiresAt: "TEXT",
+      tokensUsed: "INTEGER DEFAULT 0",
+      allowedModels: "TEXT",
+      // Last time this key was seen on an incoming request (ISO string, null = never).
+      lastUsedAt: "TEXT",
     },
     indexes: ["CREATE INDEX IF NOT EXISTS idx_ak_key ON apiKeys(key)"],
   },
@@ -121,12 +127,18 @@ export const TABLES = {
       status: "TEXT",
       tokens: "TEXT",
       meta: "TEXT",
+      // Soft-FK → requestDetails.id. Unenforced (SQLite can't ALTER TABLE ADD a
+      // real FOREIGN KEY onto an existing table), nullable: not every usage row
+      // has a matching detail row (observability logging can be disabled
+      // independently of usage tracking) and vice versa.
+      requestDetailId: "TEXT",
     },
     indexes: [
       "CREATE INDEX IF NOT EXISTS idx_uh_ts ON usageHistory(timestamp DESC)",
       "CREATE INDEX IF NOT EXISTS idx_uh_provider ON usageHistory(provider)",
       "CREATE INDEX IF NOT EXISTS idx_uh_model ON usageHistory(model)",
       "CREATE INDEX IF NOT EXISTS idx_uh_conn ON usageHistory(connectionId)",
+      "CREATE INDEX IF NOT EXISTS idx_uh_reqdetail ON usageHistory(requestDetailId)",
     ],
   },
   usageDaily: {

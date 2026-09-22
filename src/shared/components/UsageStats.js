@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FREE_PROVIDERS, AI_PROVIDERS } from "@/shared/constants/providers";
 
@@ -41,7 +41,68 @@ function TimeAgo({ timestamp }) {
   return <>{timeAgo(timestamp)}</>;
 }
 
+const detailCache = new Map();
+
+function RequestAnswerPreview({ requestDetailId }) {
+  const [state, setState] = useState({ loading: true, error: null, detail: detailCache.get(requestDetailId) || null });
+
+  useEffect(() => {
+    const cached = detailCache.get(requestDetailId);
+    if (cached) {
+      setState({ loading: false, error: null, detail: cached });
+      return;
+    }
+
+    let cancelled = false;
+    setState({ loading: true, error: null, detail: null });
+
+    fetch(`/api/usage/request-details/${encodeURIComponent(requestDetailId)}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(res.status === 404 ? "Detail not found" : "Failed to load");
+        return res.json();
+      })
+      .then((data) => {
+        if (cancelled) return;
+        detailCache.set(requestDetailId, data.detail);
+        setState({ loading: false, error: null, detail: data.detail });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState({ loading: false, error: err.message, detail: null });
+      });
+
+    return () => { cancelled = true; };
+  }, [requestDetailId]);
+
+  if (state.loading) {
+    return <div className="px-3 py-2 text-xs text-text-muted">Loading answer...</div>;
+  }
+  if (state.error) {
+    return <div className="px-3 py-2 text-xs text-error">{state.error}</div>;
+  }
+
+  const content = state.detail?.response?.content;
+  const thinking = state.detail?.response?.thinking;
+
+  return (
+    <div className="px-3 py-2 space-y-2">
+      {thinking && (
+        <div>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-1">Thinking</div>
+          <pre className="whitespace-pre-wrap break-words text-xs text-text-muted bg-bg-subtle rounded p-2 max-h-40 overflow-y-auto">{thinking}</pre>
+        </div>
+      )}
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-text-muted mb-1">Answer</div>
+        <pre className="whitespace-pre-wrap break-words text-xs text-text-main bg-bg-subtle rounded p-2 max-h-60 overflow-y-auto">{content || "[No content]"}</pre>
+      </div>
+    </div>
+  );
+}
+
 function RecentRequests({ requests = [] }) {
+  const [expanded, setExpanded] = useState(null);
+
   return (
     <Card className="flex min-w-0 flex-col overflow-hidden" padding="sm" style={{ height: 480 }}>
       {/* Header */}
@@ -65,19 +126,45 @@ function RecentRequests({ requests = [] }) {
             <tbody className="divide-y divide-border/50">
               {requests.map((r, i) => {
                 const ok = !r.status || r.status === "ok" || r.status === "success";
+                const rowKey = r.requestDetailId || i;
+                const isOpen = expanded === rowKey;
+                const canExpand = !!r.requestDetailId;
                 return (
-                  <tr key={i} className="hover:bg-bg-subtle transition-colors">
-                    <td className="py-1.5">
-                      <span className={`block w-1.5 h-1.5 rounded-full ${ok ? "bg-success" : "bg-error"}`} />
-                    </td>
-                    <td className="py-1.5 font-mono truncate max-w-[120px]" title={r.model}>{r.model}</td>
-                    <td className="py-1.5 text-right whitespace-nowrap">
-                      <span className="text-primary">{fmt(r.promptTokens)}↑</span>
-                      {" "}
-                      <span className="text-success">{fmt(r.completionTokens)}↓</span>
-                    </td>
-                    <td className="py-1.5 text-right text-text-muted whitespace-nowrap"><TimeAgo timestamp={r.timestamp} /></td>
-                  </tr>
+                  <React.Fragment key={rowKey}>
+                    <tr
+                      className={`hover:bg-bg-subtle transition-colors ${canExpand ? "cursor-pointer" : ""}`}
+                      onClick={() => canExpand && setExpanded(isOpen ? null : rowKey)}
+                    >
+                      <td className="py-1.5">
+                        <span className={`block w-1.5 h-1.5 rounded-full ${ok ? "bg-success" : "bg-error"}`} />
+                      </td>
+                      <td className="py-1.5 font-mono truncate max-w-[120px]" title={r.model}>
+                        <span className="inline-flex items-center gap-1">
+                          {canExpand && (
+                            <span
+                              className={`material-symbols-outlined text-[14px] text-text-muted transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}
+                            >
+                              chevron_right
+                            </span>
+                          )}
+                          {r.model}
+                        </span>
+                      </td>
+                      <td className="py-1.5 text-right whitespace-nowrap">
+                        <span className="text-primary">{fmt(r.promptTokens)}↑</span>
+                        {" "}
+                        <span className="text-success">{fmt(r.completionTokens)}↓</span>
+                      </td>
+                      <td className="py-1.5 text-right text-text-muted whitespace-nowrap"><TimeAgo timestamp={r.timestamp} /></td>
+                    </tr>
+                    {isOpen && (
+                      <tr>
+                        <td colSpan={4} className="bg-bg-subtle/50 border-t border-border/50">
+                          <RequestAnswerPreview requestDetailId={r.requestDetailId} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -219,6 +306,8 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
   const [periodLocal, setPeriodLocal] = useState("today");
   const isInitialLoad = useRef(true);
   const hasLoadedStats = useRef(false);
+  const refreshRef = useRef(null);
+  const lastSeenSignal = useRef(null);
   const period = periodProp ?? periodLocal;
   const setPeriod = setPeriodProp ?? setPeriodLocal;
 
@@ -254,30 +343,46 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
       .catch(() => {});
   }, []);
 
-  // Fetch filtered stats via REST when period changes
-  useEffect(() => {
-    // First load: show full spinner; subsequent: show subtle fetching indicator
-    if (isInitialLoad.current) {
-      isInitialLoad.current = false;
-      setLoading(true);
-    } else {
-      setFetching(true);
+  // Fetch period-filtered totals via REST. `silent` skips the loading indicators
+  // so SSE-triggered refreshes don't flash the cards.
+  const refreshStats = useCallback((silent = false) => {
+    if (!silent) {
+      // First load: show full spinner; subsequent: show subtle fetching indicator
+      if (isInitialLoad.current) {
+        isInitialLoad.current = false;
+        setLoading(true);
+      } else {
+        setFetching(true);
+      }
     }
 
-    fetch(`/api/usage/stats?period=${period}`)
+    return fetch(`/api/usage/stats?period=${period}`)
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data) {
           hasLoadedStats.current = true;
-          setStats((prev) => ({ ...prev, ...data }));
+          // Drop live-only fields — SSE owns those and is fresher than this response.
+          const { activeRequests, recentRequests, errorProvider, pending, ...totals } = data;
+          setStats((prev) => (prev ? { ...prev, ...totals } : data));
         }
       })
       .catch(() => {})
       .finally(() => {
-        setLoading(false);
-        setFetching(false);
+        if (!silent) {
+          setLoading(false);
+          setFetching(false);
+        }
       });
   }, [period]);
+
+  // Keep a stable handle so the SSE effect can refresh without resubscribing.
+  useEffect(() => {
+    refreshRef.current = refreshStats;
+  }, [refreshStats]);
+
+  useEffect(() => {
+    refreshStats();
+  }, [refreshStats]);
 
   // SSE connection - real-time updates for activeRequests + recentRequests only
   useEffect(() => {
@@ -286,7 +391,8 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data);
-        // Always merge only real-time fields, never overwrite full stats from REST
+        // Always merge only real-time fields, never overwrite full stats from REST:
+        // the stream is period-"all", so its totals don't match the selected period.
         setStats((prev) => {
           if (!prev) return prev;
           return {
@@ -298,6 +404,17 @@ export default function UsageStats({ period: periodProp, setPeriod: setPeriodPro
           };
         });
         if (hasLoadedStats.current) setLoading(false);
+
+        // A finished request changes the totals too. Detect it from the live feed
+        // and silently refetch the period-filtered numbers so the overview cards
+        // move together with Recent Requests instead of waiting for a reload.
+        const signal = `${data.totalRequests ?? ""}|${data.recentRequests?.[0]?.timestamp ?? ""}`;
+        if (lastSeenSignal.current === null) {
+          lastSeenSignal.current = signal;
+        } else if (lastSeenSignal.current !== signal) {
+          lastSeenSignal.current = signal;
+          if (hasLoadedStats.current) refreshRef.current?.(true);
+        }
       } catch (err) {
         console.error("[SSE CLIENT] parse error:", err);
       }

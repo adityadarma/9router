@@ -159,8 +159,7 @@ export async function saveRequestDetail(detail) {
   }
 }
 
-export async function getRequestDetails(filter = {}) {
-  const db = await getAdapter();
+function buildFilterWhere(filter = {}) {
   const conds = [];
   const params = [];
 
@@ -172,6 +171,13 @@ export async function getRequestDetails(filter = {}) {
   if (filter.endDate) { conds.push("timestamp <= ?"); params.push(new Date(filter.endDate).toISOString()); }
 
   const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  return { where, params };
+}
+
+export async function getRequestDetails(filter = {}) {
+  const db = await getAdapter();
+  const { where, params } = buildFilterWhere(filter);
+
   const cntRow = db.get(`SELECT COUNT(*) as c FROM requestDetails ${where}`, params);
   const totalItems = cntRow ? cntRow.c : 0;
 
@@ -190,6 +196,45 @@ export async function getRequestDetails(filter = {}) {
     details,
     pagination: { page, pageSize, totalItems, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
   };
+}
+
+function getCachedTokensFromTokens(tokens) {
+  return tokens?.cached_tokens || tokens?.cache_read_input_tokens || 0;
+}
+
+function getInputTokensFromTokens(tokens) {
+  const prompt = tokens?.prompt_tokens || tokens?.input_tokens || 0;
+  const cache = getCachedTokensFromTokens(tokens);
+  return prompt < cache ? cache : prompt;
+}
+
+function getOutputTokensFromTokens(tokens) {
+  const completion = tokens?.completion_tokens || tokens?.output_tokens || 0;
+  // Two stored shapes differ on whether reasoning is already counted:
+  // - nested completion_tokens_details.reasoning_tokens (OpenAI shape) is
+  //   INSIDE completion_tokens — adding it would double-count.
+  // - flat reasoning_tokens comes from Gemini's thoughtsTokenCount, which
+  //   candidatesTokenCount excludes — so it must be added.
+  if (tokens?.completion_tokens_details?.reasoning_tokens !== undefined) return completion;
+  return completion + (tokens?.reasoning_tokens || 0);
+}
+
+export async function getRequestDetailsTotals(filter = {}) {
+  const db = await getAdapter();
+  const { where, params } = buildFilterWhere(filter);
+
+  const rows = db.all(`SELECT data FROM requestDetails ${where}`, params);
+
+  const totals = { inputTokens: 0, cachedTokens: 0, cacheCreationTokens: 0, outputTokens: 0, requestCount: rows.length };
+  for (const r of rows) {
+    const detail = parseJson(r.data, {});
+    const tokens = detail.tokens || {};
+    totals.inputTokens += getInputTokensFromTokens(tokens);
+    totals.cachedTokens += getCachedTokensFromTokens(tokens);
+    totals.cacheCreationTokens += tokens.cache_creation_input_tokens || 0;
+    totals.outputTokens += getOutputTokensFromTokens(tokens);
+  }
+  return totals;
 }
 
 export async function getDistinctProviders() {
