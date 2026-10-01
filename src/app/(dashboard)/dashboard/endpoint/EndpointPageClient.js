@@ -1233,16 +1233,14 @@ export default function APIPageClient({ machineId }) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {key.tokenLimit ? (
-                    <button
-                      onClick={() => handleResetTokens(key)}
-                      className="p-2 hover:bg-primary/10 rounded text-text-muted hover:text-primary opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
-                      title="Reset token usage"
-                      aria-label="Reset token usage"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
-                    </button>
-                  ) : null}
+                  <button
+                    onClick={() => handleResetTokens(key)}
+                    className="p-2 hover:bg-primary/10 rounded text-text-muted hover:text-primary opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                    title="Reset token usage"
+                    aria-label="Reset token usage"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                  </button>
                   <button
                     onClick={() => openEditModels(key)}
                     className="p-2 hover:bg-primary/10 rounded text-text-muted hover:text-primary opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
