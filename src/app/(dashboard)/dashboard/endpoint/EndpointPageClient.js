@@ -784,6 +784,28 @@ export default function APIPageClient({ machineId }) {
     });
   };
 
+  const handleResetTokens = (key) => {
+    setConfirmState({
+      title: "Reset Token Usage",
+      message: `Reset token usage for "${key.name}"?\n\nUsed tokens (${(key.tokensUsed || 0).toLocaleString()}) will be set back to 0.`,
+      onConfirm: async () => {
+        setConfirmState(null);
+        try {
+          const res = await fetch(`/api/keys/${key.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ resetTokensUsed: true }),
+          });
+          if (res.ok) {
+            setKeys(prev => prev.map(k => k.id === key.id ? { ...k, tokensUsed: 0 } : k));
+          }
+        } catch (error) {
+          console.log("Error resetting tokens:", error);
+        }
+      }
+    });
+  };
+
   const handleToggleKey = async (id, isActive) => {
     try {
       const res = await fetch(`/api/keys/${id}`, {
@@ -1211,6 +1233,16 @@ export default function APIPageClient({ machineId }) {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  {key.tokenLimit ? (
+                    <button
+                      onClick={() => handleResetTokens(key)}
+                      className="p-2 hover:bg-primary/10 rounded text-text-muted hover:text-primary opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"
+                      title="Reset token usage"
+                      aria-label="Reset token usage"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">restart_alt</span>
+                    </button>
+                  ) : null}
                   <button
                     onClick={() => openEditModels(key)}
                     className="p-2 hover:bg-primary/10 rounded text-text-muted hover:text-primary opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-all"

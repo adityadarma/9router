@@ -130,7 +130,14 @@ export async function updateApiKey(id, data) {
       `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, tokenLimit = ?, expiresAt = ?, allowedModels = ? WHERE id = ?`,
       [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.tokenLimit, merged.expiresAt, stringifyJson(merged.allowedModels || []), id]
     );
-    merged.tokensUsed = current.tokensUsed;
+    // Optional: reset the running token counter back to zero.
+    if (data.resetTokensUsed === true) {
+      db.run(`UPDATE apiKeys SET tokensUsed = 0 WHERE id = ?`, [id]);
+      merged.tokensUsed = 0;
+    } else {
+      merged.tokensUsed = current.tokensUsed;
+    }
+    delete merged.resetTokensUsed;
     merged.lastUsedAt = current.lastUsedAt;
     result = merged;
   });
