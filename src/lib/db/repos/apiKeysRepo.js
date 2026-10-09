@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from "uuid";
 import { getAdapter } from "../driver.js";
 import { parseJson, stringifyJson } from "../helpers/jsonCol.js";
+import { keyAccessFromColumns, keyAccessToColumns } from "@/shared/utils/keyAccess.js";
+import { KEY_ACCESS_UNRESTRICTED } from "@/shared/constants/keyAccess.js";
 
 function rowToKey(row) {
   if (!row) return null;
@@ -19,6 +21,7 @@ function rowToKey(row) {
     allowedModels: normalizeAllowedModels(parseJson(row.allowedModels, [])),
     // null = never used yet.
     lastUsedAt: row.lastUsedAt || null,
+    access: keyAccessFromColumns(row.accessRestricted, row.accessAllow),
   };
 }
 
@@ -84,7 +87,9 @@ export async function getApiKeyById(id) {
   return rowToKey(row);
 }
 
+// Used by the /v1 handlers to read the presented key's access settings.
 export async function getApiKeyByKey(key) {
+  if (!key) return null;
   const db = await getAdapter();
   const row = db.get(`SELECT * FROM apiKeys WHERE key = ?`, [key]);
   return rowToKey(row);
@@ -107,10 +112,12 @@ export async function createApiKey(name, machineId, options = {}) {
     tokensUsed: 0,
     allowedModels: normalizeAllowedModels(options.allowedModels),
     lastUsedAt: null,
+    access: { restricted: false, allow: [] },
   };
+  const cols = keyAccessToColumns(KEY_ACCESS_UNRESTRICTED);
   db.run(
-    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, expiresAt, tokensUsed, allowedModels, lastUsedAt) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, apiKey.tokenLimit, apiKey.expiresAt, 0, stringifyJson(apiKey.allowedModels), null]
+    `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokenLimit, expiresAt, tokensUsed, allowedModels, lastUsedAt, accessRestricted, accessAllow) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [apiKey.id, apiKey.key, apiKey.name, apiKey.machineId, 1, apiKey.createdAt, apiKey.tokenLimit, apiKey.expiresAt, 0, stringifyJson(apiKey.allowedModels), null, cols.accessRestricted, cols.accessAllow]
   );
   return apiKey;
 }
@@ -126,20 +133,16 @@ export async function updateApiKey(id, data) {
     if ("tokenLimit" in data) merged.tokenLimit = normalizeTokenLimit(data.tokenLimit);
     if ("expiresAt" in data) merged.expiresAt = normalizeExpiresAt(data.expiresAt);
     if ("allowedModels" in data) merged.allowedModels = normalizeAllowedModels(data.allowedModels);
+    const cols = keyAccessToColumns(merged.access);
     db.run(
-      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, tokenLimit = ?, expiresAt = ?, allowedModels = ? WHERE id = ?`,
-      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.tokenLimit, merged.expiresAt, stringifyJson(merged.allowedModels || []), id]
+      `UPDATE apiKeys SET key = ?, name = ?, machineId = ?, isActive = ?, tokenLimit = ?, expiresAt = ?, allowedModels = ?, accessRestricted = ?, accessAllow = ? WHERE id = ?`,
+      [merged.key, merged.name, merged.machineId, merged.isActive ? 1 : 0, merged.tokenLimit, merged.expiresAt, stringifyJson(merged.allowedModels || []), cols.accessRestricted, cols.accessAllow, id]
     );
     // Optional: reset the running token counter back to zero.
     if (data.resetTokensUsed === true) {
       db.run(`UPDATE apiKeys SET tokensUsed = 0 WHERE id = ?`, [id]);
-      merged.tokensUsed = 0;
-    } else {
-      merged.tokensUsed = current.tokensUsed;
     }
-    delete merged.resetTokensUsed;
-    merged.lastUsedAt = current.lastUsedAt;
-    result = merged;
+    result = rowToKey(db.get(`SELECT * FROM apiKeys WHERE id = ?`, [id]));
   });
   return result;
 }
