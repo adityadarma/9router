@@ -75,3 +75,27 @@ export async function enforceKeyLimits(request, modelStr) {
   }
   return null;
 }
+
+/**
+ * /v1/models: a key with a non-empty allowedModels list sees only the entries
+ * it may call (same matching as enforceKeyLimits, so equivalent spellings and
+ * combo names line up). No key, unknown key or empty list = list unchanged.
+ */
+export async function filterModelsListByAllowed(request, list) {
+  if (!Array.isArray(list)) return list;
+  const apiKey = extractClientApiKey(request);
+  if (!apiKey) return list;
+  const key = await getApiKeyByKey(apiKey);
+  const allowed = Array.isArray(key?.allowedModels) ? key.allowedModels : [];
+  if (allowed.length === 0) return list;
+
+  // Resolve the allow list once, then match each entry exactly or canonically.
+  const exact = new Set(allowed);
+  const canonical = new Set((await Promise.all(allowed.map((m) => canonicalModelKey(m)))).filter(Boolean));
+  const out = [];
+  for (const entry of list) {
+    if (!entry?.id) continue;
+    if (exact.has(entry.id) || canonical.has(await canonicalModelKey(entry.id))) out.push(entry);
+  }
+  return out;
+}

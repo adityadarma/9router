@@ -18,7 +18,7 @@ vi.mock("../../src/sse/services/model.js", () => ({
 }));
 vi.mock("@/sse/utils/logger.js", () => ({ warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() }));
 
-const { enforceKeyLimits, isModelAllowedForKey } = await import("../../src/sse/services/keyLimits.js");
+const { enforceKeyLimits, isModelAllowedForKey, filterModelsListByAllowed } = await import("../../src/sse/services/keyLimits.js");
 
 const FUTURE = new Date(Date.now() + 86400000).toISOString();
 const PAST = new Date(Date.now() - 86400000).toISOString();
@@ -93,5 +93,30 @@ describe("isModelAllowedForKey", () => {
   it("treats an empty or missing list as unrestricted", async () => {
     expect(await isModelAllowedForKey({ allowedModels: [] }, "anything")).toBe(true);
     expect(await isModelAllowedForKey({}, "anything")).toBe(true);
+  });
+});
+
+describe("filterModelsListByAllowed (/v1/models)", () => {
+  const list = [
+    { id: "kr/claude", owned_by: "kr" },
+    { id: "openai/gpt-5", owned_by: "openai" },
+    { id: "Main", owned_by: "combo" },
+    { id: "other-combo", owned_by: "combo" },
+  ];
+
+  it("returns the full list without a key, for unknown keys and unrestricted keys", async () => {
+    expect(await filterModelsListByAllowed(req(null), list)).toBe(list);
+    expect(await filterModelsListByAllowed(req("sk-unknown"), list)).toBe(list);
+    expect(await filterModelsListByAllowed(req("sk-free"), list)).toBe(list);
+  });
+
+  it("keeps only allowed models and combos, matching equivalent spellings", async () => {
+    const out = await filterModelsListByAllowed(req("sk-models"), list);
+    expect(out.map((m) => m.id)).toEqual(["kr/claude", "Main"]);
+  });
+
+  it("reads the key from x-goog-api-key too", async () => {
+    const out = await filterModelsListByAllowed(req("sk-models", { header: "x-goog-api-key" }), list);
+    expect(out.map((m) => m.id)).toEqual(["kr/claude", "Main"]);
   });
 });
