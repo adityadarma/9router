@@ -322,7 +322,9 @@ export async function saveRequestUsage(entry) {
       const totalTokens = (promptTokens || 0) + (completionTokens || 0);
       try {
         const { addTokensUsedByKey, touchApiKeyUsed } = await import("./apiKeysRepo.js");
-        if (totalTokens > 0) await addTokensUsedByKey(entry.apiKey, totalTokens);
+        // Only accrue when this entry was actually inserted: duplicate saves of
+        // the same entry are deduped above and must not be counted twice.
+        if (inserted && totalTokens > 0) await addTokensUsedByKey(entry.apiKey, totalTokens);
         // Stamped even for zero-token requests (errors, empty responses) so
         // "last used" reflects real activity, not just billable activity.
         await touchApiKeyUsed(entry.apiKey, entry.timestamp);
