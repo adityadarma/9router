@@ -293,7 +293,7 @@ export default function Sidebar({ onClose }) {
             })}
 
             {/* Remote */}
-            <a
+            {/* <a
               href="https://9remote.cc"
               target="_blank"
               rel="noreferrer"
@@ -310,10 +310,10 @@ export default function Sidebar({ onClose }) {
               <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-[3px] bg-orange-500/15 text-orange-400">
                 HOT
               </span>
-            </a>
+            </a> */}
 
             {/* 9English */}
-            <a
+            {/* <a
               href="https://9english.net/"
               target="_blank"
               rel="noreferrer"
@@ -327,7 +327,7 @@ export default function Sidebar({ onClose }) {
                 translate
               </span>
               <span className="text-[13px] font-medium">9English</span>
-            </a>
+            </a> */}
 
             {/* Settings */}
             <Link

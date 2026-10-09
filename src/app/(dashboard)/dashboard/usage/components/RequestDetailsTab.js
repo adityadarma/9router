@@ -90,6 +90,21 @@ function getCacheCreationTokens(tokens) {
   return tokens?.cache_creation_input_tokens || 0;
 }
 
+function getReasoningTokens(tokens) {
+  return tokens?.completion_tokens_details?.reasoning_tokens ?? tokens?.reasoning_tokens ?? 0;
+}
+
+function getOutputTokens(tokens) {
+  const completion = tokens?.completion_tokens || tokens?.output_tokens || 0;
+  // Two stored shapes differ on whether reasoning is already counted:
+  // - nested completion_tokens_details.reasoning_tokens (OpenAI shape) is
+  //   INSIDE completion_tokens — adding it would double-count.
+  // - flat reasoning_tokens comes from Gemini's thoughtsTokenCount, which
+  //   candidatesTokenCount excludes — so it must be added.
+  if (tokens?.completion_tokens_details?.reasoning_tokens !== undefined) return completion;
+  return completion + (tokens?.reasoning_tokens || 0);
+}
+
 function getInputTokens(tokens) {
   const prompt = tokens?.prompt_tokens || tokens?.input_tokens || 0;
   // Canonical storage keeps prompt cache-inclusive. Legacy Claude rows may have
@@ -112,6 +127,7 @@ export default function RequestDetailsTab() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [providers, setProviders] = useState([]);
   const [providerNameCache, setProviderNameCache] = useState(null);
+  const [totals, setTotals] = useState(null);
   const [filters, setFilters] = useState({
     provider: "",
     startDate: "",
@@ -147,6 +163,7 @@ export default function RequestDetailsTab() {
 
       setDetails(data.details || []);
       setPagination(prev => ({ ...prev, ...data.pagination }));
+      setTotals(data.totals || null);
     } catch (error) {
       console.error("Failed to fetch request details:", error);
     } finally {
@@ -247,6 +264,33 @@ export default function RequestDetailsTab() {
         </div>
       </Card>
 
+      {totals && (
+        <Card padding="md">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Requests</span>
+              <span className="font-mono text-lg text-text-main">{totals.requestCount.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Input Tokens</span>
+              <span className="font-mono text-lg text-text-main">{totals.inputTokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Cached</span>
+              <span className="font-mono text-lg text-text-main">{totals.cachedTokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Cache Creation</span>
+              <span className="font-mono text-lg text-text-main">{totals.cacheCreationTokens.toLocaleString()}</span>
+            </div>
+            <div>
+              <span className="block text-xs text-text-muted uppercase tracking-wide">Output Tokens</span>
+              <span className="font-mono text-lg text-text-main">{totals.outputTokens.toLocaleString()}</span>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <Card padding="none">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px]">
@@ -306,7 +350,7 @@ export default function RequestDetailsTab() {
                       {getCacheCreationTokens(detail.tokens) > 0 ? getCacheCreationTokens(detail.tokens).toLocaleString() : "—"}
                     </td>
                     <td className="p-4 text-sm text-text-main text-right font-mono">
-                      {detail.tokens?.completion_tokens?.toLocaleString() || 0}
+                      {getOutputTokens(detail.tokens).toLocaleString()}
                     </td>
                     <td className="p-4 text-sm text-text-muted">
                       <div className="flex flex-col gap-0.5">
@@ -408,9 +452,17 @@ export default function RequestDetailsTab() {
               <div>
                 <span className="text-text-muted">Output Tokens:</span>{" "}
                 <span className="text-text-main font-mono">
-                  {selectedDetail.tokens?.completion_tokens?.toLocaleString() || 0}
+                  {getOutputTokens(selectedDetail.tokens).toLocaleString()}
                 </span>
               </div>
+              {getReasoningTokens(selectedDetail.tokens) > 0 && (
+                <div>
+                  <span className="text-text-muted">Reasoning:</span>{" "}
+                  <span className="text-text-main font-mono">
+                    {getReasoningTokens(selectedDetail.tokens).toLocaleString()}
+                  </span>
+                </div>
+              )}
             </div>
 
             {selectedDetail.pxpipe && (

@@ -37,6 +37,10 @@ vi.mock("@/sse/services/auth.js", () => ({
     return a?.startsWith("Bearer ") ? a.slice(7) : request.headers.get("x-api-key");
   },
   isValidApiKey: async () => true,
+  // Limit-token helpers (custom branch): unrestricted for these tests.
+  checkApiKey: async () => ({ valid: true, reason: null }),
+  checkApiKeyLimits: async () => ({ ok: true, reason: null }),
+  checkApiKeyModel: async () => ({ ok: true }),
 }));
 vi.mock("@/sse/services/tokenRefresh.js", () => ({
   checkAndRefreshToken: async (_p, c) => c,
