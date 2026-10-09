@@ -8,6 +8,7 @@ import {
 import { getSettings, getProviderConnectionById } from "@/lib/localDb";
 import { getModelInfo } from "../services/model.js";
 import { getKeyAccessContext, enforceKeyAccessResolved } from "../services/keyAccess.js";
+import { enforceKeyLimits } from "../services/keyLimits.js";
 import { handleVideoProxyCore, getVideoConfig, sanitizeSecrets } from "open-sse/handlers/videoCore.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -124,6 +125,10 @@ export async function handleVideoCreate(request, action) {
     await getKeyAccessContext(request), bodyInfo.parsed?.model ? String(bodyInfo.parsed.model) : "", provider, model
   );
   if (keyAccessDenied) return keyAccessDenied;
+
+  // Limit-token: known key's expiry / token limit and allowedModels.
+  const keyLimitDenied = await enforceKeyLimits(request, bodyInfo.parsed?.model ? String(bodyInfo.parsed.model) : (provider && model ? `${provider}/${model}` : ""));
+  if (keyLimitDenied) return keyLimitDenied;
 
   // Strip the provider prefix (e.g. "xai/grok-imagine-video") before forwarding;
   // otherwise forward the original bytes untouched.

@@ -14,6 +14,7 @@ import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { handleComboChat, getComboModelsFromData } from "open-sse/services/combo.js";
 import { getKeyAccessContext, enforceKeyAccessProvider } from "../services/keyAccess.js";
+import { enforceKeyLimits } from "../services/keyLimits.js";
 import { assertPublicUrlResolved } from "@/shared/utils/ssrfGuard.js";
 
 /**
@@ -97,6 +98,10 @@ export async function handleFetch(request) {
   // restricted key needs the provider id (or the combo) on its list.
   const keyAccessDenied = await enforceKeyAccessProvider(await getKeyAccessContext(request), providerInput, comboModels);
   if (keyAccessDenied) return keyAccessDenied;
+
+  // Limit-token: known key's expiry / token limit and allowedModels.
+  const keyLimitDenied = await enforceKeyLimits(request, providerInput);
+  if (keyLimitDenied) return keyLimitDenied;
   if (comboModels) {
     const comboStrategies = settings.comboStrategies || {};
     const comboStrategy = comboStrategies[providerInput]?.fallbackStrategy || settings.comboStrategy || "fallback";

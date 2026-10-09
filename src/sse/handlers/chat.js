@@ -6,9 +6,8 @@ import {
   clearAccountError,
   extractApiKey,
   checkApiKey,
-  checkApiKeyLimits,
-  checkApiKeyModel,
 } from "../services/auth.js";
+import { enforceKeyLimits, apiKeyDeniedResponse } from "../services/keyLimits.js";
 import { handleAntigravityQuotaError, clearAntigravityStrikes } from "../services/antigravityQuota.js";
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
@@ -27,25 +26,7 @@ import * as log from "../utils/logger.js";
 import { updateProviderCredentials, checkAndRefreshToken } from "../services/tokenRefresh.js";
 import { getProjectIdForConnection } from "open-sse/services/projectId.js";
 import { stripModelContextMarker } from "open-sse/utils/modelMarkers.js";
-import { getKeyAccessContext, enforceKeyAccess, filterAdapterModels } from "../services/keyAccess.js";
-
-/**
- * Build an error response for a denied API key (limit-token feature).
- */
-function apiKeyDeniedResponse(reason) {
-  switch (reason) {
-    case "expired":
-      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "API key has expired");
-    case "limit":
-      return errorResponse(HTTP_STATUS.FORBIDDEN, "API key token limit reached");
-    case "inactive":
-      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "API key is paused");
-    case "model_not_allowed":
-      return errorResponse(HTTP_STATUS.FORBIDDEN, "This API key is not allowed to use the requested model");
-    default:
-      return errorResponse(HTTP_STATUS.UNAUTHORIZED, "Invalid API key");
-  }
-}
+import { getKeyAccessContext, enforceKeyAccess, filterAdapterModels, extractClientApiKey } from "../services/keyAccess.js";
 
 /**
  * Handle chat completion request
@@ -79,9 +60,10 @@ export async function handleChat(request, clientRawRequest = null) {
   // Request summary is emitted as the unified "▶" line in chatCore (has fmt/thinking/account)
 
   // Log API key (masked)
-  const authHeader = request.headers.get("Authorization");
-  const apiKey = extractApiKey(request);
-  if (authHeader && apiKey) {
+  // Read the key from every place the middleware accepts (Bearer, x-api-key,
+  // x-goog-api-key, ?key=) so limits and usage attribution apply however it is sent.
+  const apiKey = extractClientApiKey(request);
+  if (apiKey) {
     const masked = log.maskKey(apiKey);
     log.debug("AUTH", `API Key: ${masked}`);
   } else {
@@ -100,14 +82,6 @@ export async function handleChat(request, clientRawRequest = null) {
       log.warn("AUTH", `API key rejected (requireApiKey=true): ${reason}`);
       return apiKeyDeniedResponse(reason);
     }
-  } else if (apiKey) {
-    // requireApiKey is OFF → behave exactly as before (free pass), EXCEPT
-    // honor a known key's configured expiry / token limit if one is set.
-    const { ok, reason } = await checkApiKeyLimits(apiKey);
-    if (!ok) {
-      log.warn("AUTH", `API key limit exceeded: ${reason}`);
-      return apiKeyDeniedResponse(reason);
-    }
   }
 
   if (!modelStr) {
@@ -115,16 +89,10 @@ export async function handleChat(request, clientRawRequest = null) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
   }
 
-  // Enforce per-key allowed-models. Applies whenever a known key restricts its
-  // models (non-empty allowedModels), regardless of requireApiKey. Keys with no
-  // restriction, unknown keys, and no-key requests are unaffected.
-  if (apiKey) {
-    const { ok } = await checkApiKeyModel(apiKey, modelStr);
-    if (!ok) {
-      log.warn("AUTH", `Model "${modelStr}" not allowed for this API key`);
-      return apiKeyDeniedResponse("model_not_allowed");
-    }
-  }
+  // Limit-token: a known key's expiry / token limit and allowedModels apply
+  // regardless of requireApiKey. Unknown keys and no-key requests are unaffected.
+  const keyLimitDenied = await enforceKeyLimits(request, modelStr);
+  if (keyLimitDenied) return keyLimitDenied;
 
   // Per-key access control: a restricted key may call only its listed combos and
   // models. Checked once on the requested target, before bypass, combo expansion

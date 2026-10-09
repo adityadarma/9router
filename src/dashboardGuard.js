@@ -48,6 +48,13 @@ const ALWAYS_PROTECTED = [
   "/api/oauth/zed/auto-import",
 ];
 
+// Expose full conversation payloads (prompts, tool calls, responses). Require a
+// real session (JWT / CLI token); with requireLogin disabled only the local
+// machine may read them, never a LAN/tunnel client.
+const PAYLOAD_PROTECTED = [
+  "/api/usage/request-details",
+];
+
 // Require auth, but allow through if requireLogin is disabled
 const PROTECTED_API_PATHS = [
   "/api/settings",
@@ -167,6 +174,13 @@ async function canAccessLocalOnlyRoute(request) {
   return false;
 }
 
+async function canAccessPayloadRoute(request) {
+  if (await hasValidCliToken(request)) return true;
+  if (await hasValidToken(request)) return true;
+  // requireLogin disabled: local browser only (loopback peer + Origin).
+  return isLocalRequest(request) && await isAuthenticated(request);
+}
+
 async function hasValidToken(request) {
   const token = request.cookies.get("auth_token")?.value;
   return await verifyDashboardAuthToken(token);
@@ -202,6 +216,7 @@ export const __test__ = {
   extractApiKey,
   canAccessPublicLlmApi,
   canAccessLocalOnlyRoute,
+  canAccessPayloadRoute,
 };
 
 export async function proxy(request) {
@@ -218,6 +233,11 @@ export async function proxy(request) {
   if (ALWAYS_PROTECTED.some((p) => pathname.startsWith(p))) {
     if (await hasValidCliToken(request) || await hasValidToken(request))
       return NextResponse.next();
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (PAYLOAD_PROTECTED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    if (await canAccessPayloadRoute(request)) return NextResponse.next();
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

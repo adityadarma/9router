@@ -5,6 +5,7 @@ import {
 import { getSettings } from "@/lib/localDb";
 import { getModelInfo, getComboModels } from "../services/model.js";
 import { getKeyAccessContext, enforceKeyAccess } from "../services/keyAccess.js";
+import { enforceKeyLimits } from "../services/keyLimits.js";
 import { handleTtsCore } from "open-sse/handlers/ttsCore.js";
 import { errorResponse, unavailableResponse } from "open-sse/utils/error.js";
 import { HTTP_STATUS } from "open-sse/config/runtimeConfig.js";
@@ -48,6 +49,10 @@ export async function handleTts(request) {
   // Per-key access control: requested target, before combo expansion.
   const keyAccessDenied = await enforceKeyAccess(await getKeyAccessContext(request), modelStr);
   if (keyAccessDenied) return keyAccessDenied;
+
+  // Limit-token: known key's expiry / token limit and allowedModels.
+  const keyLimitDenied = await enforceKeyLimits(request, modelStr);
+  if (keyLimitDenied) return keyLimitDenied;
 
   // Combo expansion: model may be a combo name → run fallback/round-robin across models
   const comboModels = await getComboModels(modelStr);

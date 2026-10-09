@@ -306,3 +306,47 @@ describe("dashboard guard helpers", () => {
     expect(__test__.extractApiKey(apiRequest)).toBe("header-key");
   });
 });
+
+describe("dashboard guard request-details payload routes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.NINEROUTER_PEER_TOKEN = PEER_TOKEN;
+    mocks.getConsistentMachineId.mockResolvedValue("cli-token");
+    mocks.verifyDashboardAuthToken.mockResolvedValue(false);
+  });
+
+  for (const path of ["/api/usage/request-details", "/api/usage/request-details/abc123"]) {
+    it(`blocks remote ${path} when requireLogin is disabled`, async () => {
+      mocks.getSettings.mockResolvedValue({ requireLogin: false });
+      const response = await proxy(request(path, { host: "my-tunnel.example.com" }));
+      expect(response.status).toBe(401);
+    });
+
+    it(`allows local ${path} when requireLogin is disabled`, async () => {
+      mocks.getSettings.mockResolvedValue({ requireLogin: false });
+      const response = await proxy(localRequest(path, { host: "localhost:20128" }));
+      expect(response).toBe(mocks.nextResponse);
+    });
+
+    it(`allows remote ${path} with a valid dashboard session`, async () => {
+      mocks.getSettings.mockResolvedValue({ requireLogin: false });
+      mocks.verifyDashboardAuthToken.mockResolvedValue(true);
+      const req = request(path, { host: "my-tunnel.example.com" });
+      req.cookies.get = vi.fn(() => ({ value: "jwt" }));
+      const response = await proxy(req);
+      expect(response).toBe(mocks.nextResponse);
+    });
+
+    it(`blocks local ${path} when requireLogin is on and no session`, async () => {
+      mocks.getSettings.mockResolvedValue({ requireLogin: true });
+      const response = await proxy(localRequest(path, { host: "localhost:20128" }));
+      expect(response.status).toBe(401);
+    });
+  }
+
+  it("leaves other /api/usage routes on the requireLogin rule", async () => {
+    mocks.getSettings.mockResolvedValue({ requireLogin: false });
+    const response = await proxy(request("/api/usage/history", { host: "my-tunnel.example.com" }));
+    expect(response).toBe(mocks.nextResponse);
+  });
+});
