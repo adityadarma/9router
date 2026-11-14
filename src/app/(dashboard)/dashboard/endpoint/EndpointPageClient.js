@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import PropTypes from "prop-types";
-import { Card, Button, Input, Modal, CardSkeleton, Toggle, ConfirmModal, ModelSelectModal } from "@/shared/components";
+import { Card, Button, Input, Modal, CardSkeleton, Toggle, ConfirmModal } from "@/shared/components";
 import { useCopyToClipboard } from "@/shared/hooks/useCopyToClipboard";
 import {
   TUNNEL_BENEFITS,
@@ -40,20 +40,11 @@ export default function APIPageClient({ machineId }) {
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyTokenLimit, setNewKeyTokenLimit] = useState("");
   const [newKeyExpiresAt, setNewKeyExpiresAt] = useState("");
-  const [newKeyAllowedModels, setNewKeyAllowedModels] = useState([]);
   const [createdKey, setCreatedKey] = useState(null);
   const [confirmState, setConfirmState] = useState(null);
 
-  // Allowed-models selection (same approach as the Create Combo page:
-  // ModelSelectModal fed by connected providers + model aliases).
-  const [activeProviders, setActiveProviders] = useState([]);
-  const [modelAliases, setModelAliases] = useState({});
-  const [showCreateModelSelect, setShowCreateModelSelect] = useState(false);
-  const [showEditModelSelect, setShowEditModelSelect] = useState(false);
-
-  // Edit modal state (edit allowed models + token limit + expiry)
+  // Edit modal state (token limit + expiry)
   const [editModelsKey, setEditModelsKey] = useState(null);
-  const [editModelsList, setEditModelsList] = useState([]);
   const [editTokenLimit, setEditTokenLimit] = useState("");
   const [editExpiresAt, setEditExpiresAt] = useState("");
   const [savingModels, setSavingModels] = useState(false);
@@ -286,15 +277,7 @@ export default function APIPageClient({ machineId }) {
         return data.keys || [];
       };
 
-      // Same data the Create Combo page loads to feed ModelSelectModal:
-      // connected providers + model aliases (plus our API keys).
-      const [existingKeys, providersRes, aliasRes] = await Promise.all([
-        fetchKeys(),
-        fetch("/api/providers"),
-        fetch("/api/models/alias"),
-      ]);
-
-      let existing = existingKeys;
+      let existing = await fetchKeys();
       // Auto-provision a default key for first-time users so the endpoint works out of the box.
       if (existing.length === 0) {
         try {
@@ -308,14 +291,6 @@ export default function APIPageClient({ machineId }) {
       }
       setKeys(existing);
 
-      if (providersRes.ok) {
-        const pd = await providersRes.json();
-        setActiveProviders(pd.connections || []);
-      }
-      if (aliasRes.ok) {
-        const ad = await aliasRes.json();
-        setModelAliases(ad.aliases || {});
-      }
     } catch (error) {
       console.log("Error fetching data:", error);
     } finally {
@@ -676,8 +651,6 @@ export default function APIPageClient({ machineId }) {
         const [y, m, d] = newKeyExpiresAt.split("-").map(Number);
         payload.expiresAt = new Date(y, m - 1, d, 23, 59, 59, 999).toISOString();
       }
-      if (newKeyAllowedModels.length > 0) payload.allowedModels = newKeyAllowedModels;
-
       const res = await fetch("/api/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -691,7 +664,6 @@ export default function APIPageClient({ machineId }) {
           setNewKeyName("");
           setNewKeyTokenLimit("");
           setNewKeyExpiresAt("");
-        setNewKeyAllowedModels([]);
         setShowAddModal(false);
       }
     } catch (error) {
@@ -699,10 +671,9 @@ export default function APIPageClient({ machineId }) {
     }
   };
 
-  // ─── Edit existing key (allowed models + token limit + expiry) ───
+  // ─── Edit existing key (token limit + expiry) ───
   const openEditModels = (key) => {
     setEditModelsKey(key);
-    setEditModelsList(Array.isArray(key.allowedModels) ? key.allowedModels : []);
     setEditTokenLimit(key.tokenLimit ? String(key.tokenLimit) : "");
     // Convert stored ISO timestamp back to a local YYYY-MM-DD for the date input.
     if (key.expiresAt) {
@@ -716,7 +687,6 @@ export default function APIPageClient({ machineId }) {
 
   const closeEditModels = () => {
     setEditModelsKey(null);
-    setEditModelsList([]);
     setEditTokenLimit("");
     setEditExpiresAt("");
   };
@@ -725,7 +695,7 @@ export default function APIPageClient({ machineId }) {
     if (!editModelsKey) return;
     setSavingModels(true);
     try {
-      const payload = { allowedModels: editModelsList };
+      const payload = {};
       const limitNum = parseInt(editTokenLimit, 10);
       // Empty field → null (unlimited); otherwise the parsed positive integer.
       payload.tokenLimit = Number.isFinite(limitNum) && limitNum > 0 ? limitNum : null;
@@ -748,7 +718,6 @@ export default function APIPageClient({ machineId }) {
         const k = data.key || {};
         setKeys(prev => prev.map(x => x.id === editModelsKey.id ? {
           ...x,
-          allowedModels: k.allowedModels ?? editModelsList,
           tokenLimit: k.tokenLimit ?? payload.tokenLimit,
           expiresAt: k.expiresAt ?? payload.expiresAt,
         } : x));
@@ -1237,18 +1206,6 @@ export default function APIPageClient({ machineId }) {
                       </span>
                     ) : null}
                   </div>
-                  {Array.isArray(key.allowedModels) && key.allowedModels.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-1 mt-1">
-                      <span className="text-xs text-text-muted mr-1">Models:</span>
-                      {key.allowedModels.map((m) => (
-                        <span key={m} className="text-xs font-mono px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                          {m}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-text-muted mt-1">Models: all allowed</p>
-                  )}
                   {key.isActive === false && (
                     <p className="text-xs text-orange-500 mt-1">Paused</p>
                   )}
@@ -1322,7 +1279,6 @@ export default function APIPageClient({ machineId }) {
           setNewKeyName("");
           setNewKeyTokenLimit("");
           setNewKeyExpiresAt("");
-          setNewKeyAllowedModels([]);
         }}
       >
         <div className="flex flex-col gap-4">
@@ -1350,40 +1306,6 @@ export default function APIPageClient({ machineId }) {
             />
             <p className="text-xs text-text-muted">Leave empty for a key that never expires.</p>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-text-main">Allowed Models (optional)</label>
-            {newKeyAllowedModels.length === 0 ? (
-              <div className="text-center py-4 border border-dashed border-black/10 dark:border-white/10 rounded-lg bg-black/[0.01] dark:bg-white/[0.01]">
-                <span className="material-symbols-outlined text-text-muted text-xl mb-1">layers</span>
-                <p className="text-xs text-text-muted">No models added — all models allowed</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1 max-h-[260px] overflow-y-auto">
-                {newKeyAllowedModels.map((m) => (
-                  <div key={m} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-surface">
-                    <code className="text-xs font-mono truncate">{m}</code>
-                    <button
-                      type="button"
-                      onClick={() => setNewKeyAllowedModels((prev) => prev.filter((x) => x !== m))}
-                      className="p-1 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
-                      title="Remove"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">close</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowCreateModelSelect(true)}
-              className="w-full mt-1 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-primary font-medium hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-1"
-            >
-              <span className="material-symbols-outlined text-[16px]">add</span>
-              Add Model
-            </button>
-            <p className="text-xs text-text-muted">Leave empty to allow all models. You can change this later.</p>
-          </div>
           <div className="flex gap-2">
             <Button onClick={handleCreateKey} fullWidth disabled={!newKeyName.trim()}>
               Create
@@ -1394,7 +1316,6 @@ export default function APIPageClient({ machineId }) {
                 setNewKeyName("");
                 setNewKeyTokenLimit("");
                 setNewKeyExpiresAt("");
-                setNewKeyAllowedModels([]);
               }}
               variant="ghost"
               fullWidth
@@ -1404,19 +1325,6 @@ export default function APIPageClient({ machineId }) {
           </div>
         </div>
       </Modal>
-
-      {/* Model selector for Create modal (same component as Create Combo page) */}
-      <ModelSelectModal
-        isOpen={showCreateModelSelect}
-        onClose={() => setShowCreateModelSelect(false)}
-        onSelect={(model) => setNewKeyAllowedModels((prev) => prev.includes(model.value) ? prev : [...prev, model.value])}
-        onDeselect={(model) => setNewKeyAllowedModels((prev) => prev.filter((m) => m !== model.value))}
-        activeProviders={activeProviders}
-        modelAliases={modelAliases}
-        title="Add Allowed Model"
-        addedModelValues={newKeyAllowedModels}
-        closeOnSelect={false}
-      />
 
       {/* Created Key Modal */}
       <Modal
@@ -1453,7 +1361,7 @@ export default function APIPageClient({ machineId }) {
         </div>
       </Modal>
 
-      {/* Edit API Key Modal (allowed models + token limit + expiry) */}
+      {/* Edit API Key Modal (token limit + expiry) */}
       <Modal
         isOpen={!!editModelsKey}
         title={editModelsKey ? `Edit API Key — ${editModelsKey.name}` : "Edit API Key"}
@@ -1478,40 +1386,6 @@ export default function APIPageClient({ machineId }) {
             />
             <p className="text-xs text-text-muted">Leave empty for a key that never expires.</p>
           </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-text-main">Allowed Models</label>
-            {editModelsList.length === 0 ? (
-              <div className="text-center py-4 border border-dashed border-black/10 dark:border-white/10 rounded-lg bg-black/[0.01] dark:bg-white/[0.01]">
-                <span className="material-symbols-outlined text-text-muted text-xl mb-1">layers</span>
-                <p className="text-xs text-text-muted">No models added — all models allowed</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-1 max-h-[260px] overflow-y-auto">
-                {editModelsList.map((m) => (
-                  <div key={m} className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border border-border bg-surface">
-                    <code className="text-xs font-mono truncate">{m}</code>
-                    <button
-                      type="button"
-                      onClick={() => setEditModelsList((prev) => prev.filter((x) => x !== m))}
-                      className="p-1 rounded text-text-muted hover:text-red-500 hover:bg-red-500/10 transition-colors shrink-0"
-                      title="Remove"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">close</span>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowEditModelSelect(true)}
-              className="w-full mt-1 py-2 border border-dashed border-black/10 dark:border-white/10 rounded-lg text-xs text-primary font-medium hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-1"
-            >
-              <span className="material-symbols-outlined text-[16px]">add</span>
-              Add Model
-            </button>
-            <p className="text-xs text-text-muted">Leave empty to allow all models.</p>
-          </div>
           <div className="flex gap-2">
             <Button onClick={handleSaveModels} fullWidth disabled={savingModels}>
               {savingModels ? "Saving…" : "Save"}
@@ -1526,19 +1400,6 @@ export default function APIPageClient({ machineId }) {
            </div>
         </div>
       </Modal>
-
-      {/* Model selector for Edit modal (same component as Create Combo page) */}
-      <ModelSelectModal
-        isOpen={showEditModelSelect}
-        onClose={() => setShowEditModelSelect(false)}
-        onSelect={(model) => setEditModelsList((prev) => prev.includes(model.value) ? prev : [...prev, model.value])}
-        onDeselect={(model) => setEditModelsList((prev) => prev.filter((m) => m !== model.value))}
-        activeProviders={activeProviders}
-        modelAliases={modelAliases}
-        title="Add Allowed Model"
-        addedModelValues={editModelsList}
-        closeOnSelect={false}
-      />
 
       {/* Enable Tunnel Modal */}
       <Modal

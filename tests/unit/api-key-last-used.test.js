@@ -96,14 +96,13 @@ describe("API key lastUsedAt", () => {
     await db.touchApiKeyUsed(created.key, when);
 
     const updated = await db.updateApiKey(created.id, {
-      allowedModels: ["gpt-4"],
       tokenLimit: 1000,
     });
     expect(updated.lastUsedAt).toBe(when);
 
     const fetched = await db.getApiKeyById(created.id);
     expect(fetched.lastUsedAt).toBe(when);
-    expect(fetched.allowedModels).toEqual(["gpt-4"]);
+    expect(fetched.tokenLimit).toBe(1000);
   });
 
   it("touchApiKeyUsed is a no-op for unknown or empty keys", async () => {
@@ -134,10 +133,10 @@ describe("API key lastUsedAt", () => {
     seed.exec(`CREATE TABLE _meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`);
     seed.exec(`INSERT INTO _meta(key, value) VALUES('schemaVersion', '1')`);
     seed.exec(
-      `CREATE TABLE apiKeys (id TEXT PRIMARY KEY, key TEXT UNIQUE NOT NULL, name TEXT, machineId TEXT, isActive INTEGER DEFAULT 1, createdAt TEXT NOT NULL, tokenLimit INTEGER, expiresAt TEXT, tokensUsed INTEGER DEFAULT 0, allowedModels TEXT)`
+      `CREATE TABLE apiKeys (id TEXT PRIMARY KEY, key TEXT UNIQUE NOT NULL, name TEXT, machineId TEXT, isActive INTEGER DEFAULT 1, createdAt TEXT NOT NULL, tokenLimit INTEGER, expiresAt TEXT, tokensUsed INTEGER DEFAULT 0)`
     );
     seed.exec(
-      `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokensUsed, allowedModels) VALUES('old-1', 'sk-legacy', 'Legacy Key', 'm1', 1, '2026-01-01T00:00:00.000Z', 12345, '[]')`
+      `INSERT INTO apiKeys(id, key, name, machineId, isActive, createdAt, tokensUsed) VALUES('old-1', 'sk-legacy', 'Legacy Key', 'm1', 1, '2026-01-01T00:00:00.000Z', 12345)`
     );
     seed.close();
 

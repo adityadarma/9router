@@ -16,7 +16,9 @@ export function getInputTokens(tokens) {
 }
 
 export function getOutputTokens(tokens) {
-  // Translators store usage in either OpenAI field names
-  // (completion_tokens) or Claude field names (output_tokens) — issue #3890.
-  return tokens?.completion_tokens || tokens?.output_tokens || 0;
+  const completion = tokens?.completion_tokens || tokens?.output_tokens || 0;
+  // Nested reasoning is already included in completion_tokens. Flat reasoning
+  // comes from Gemini and must be added because candidatesTokenCount excludes it.
+  if (tokens?.completion_tokens_details?.reasoning_tokens !== undefined) return completion;
+  return completion + (tokens?.reasoning_tokens || 0);
 }

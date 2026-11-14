@@ -81,7 +81,7 @@ export async function handleSystemone(request) {
   const keyAccessDenied = await enforceKeyAccessResolved(await getKeyAccessContext(request), modelStr, provider, model);
   if (keyAccessDenied) return keyAccessDenied;
 
-  // Limit-token: known key's expiry / token limit and allowedModels.
+  // Enforce a known key's expiry and token limit.
   const keyLimitDenied = await enforceKeyLimits(request, modelStr);
   if (keyLimitDenied) return keyLimitDenied;
 

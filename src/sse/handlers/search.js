@@ -79,7 +79,7 @@ export async function handleSearch(request) {
   const keyAccessDenied = await enforceKeyAccessProvider(await getKeyAccessContext(request), providerInput, comboModels);
   if (keyAccessDenied) return keyAccessDenied;
 
-  // Limit-token: known key's expiry / token limit and allowedModels.
+  // Enforce a known key's expiry and token limit.
   const keyLimitDenied = await enforceKeyLimits(request, providerInput);
   if (keyLimitDenied) return keyLimitDenied;
   if (comboModels) {

@@ -50,7 +50,7 @@ export async function handleTts(request) {
   const keyAccessDenied = await enforceKeyAccess(await getKeyAccessContext(request), modelStr);
   if (keyAccessDenied) return keyAccessDenied;
 
-  // Limit-token: known key's expiry / token limit and allowedModels.
+  // Enforce a known key's expiry and token limit.
   const keyLimitDenied = await enforceKeyLimits(request, modelStr);
   if (keyLimitDenied) return keyLimitDenied;
 

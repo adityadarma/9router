@@ -94,9 +94,9 @@ export async function handleChat(request, clientRawRequest = null) {
     return errorResponse(HTTP_STATUS.BAD_REQUEST, "Missing model");
   }
 
-  // Limit-token: a known key's expiry / token limit and allowedModels apply
+  // A known key's expiry and token limit apply
   // regardless of requireApiKey. Unknown keys and no-key requests are unaffected.
-  const keyLimitDenied = await enforceKeyLimits(request, modelStr);
+  const keyLimitDenied = await enforceKeyLimits(request);
   if (keyLimitDenied) return keyLimitDenied;
 
   // Per-key access control: a restricted key may call only its listed combos and
