@@ -139,6 +139,8 @@ describe("Kiro external_idp (CLIProxyAPI) import and refresh", () => {
     expect(calls[0].init.headers.Authorization).toBe("Bearer microsoft-access-token");
     expect(calls[0].init.headers.TokenType).toBe("EXTERNAL_IDP");
     expect(calls[0].init.headers.tokentype).toBeUndefined();
+    expect(calls[0].init.headers["User-Agent"]).toMatch(/KiroIDE-1\.4\.154-[0-9a-f]{64}$/);
+    expect(calls[0].init.headers["X-Amz-User-Agent"]).toMatch(/KiroIDE-1\.4\.154-[0-9a-f]{64}$/);
   });
 
   it("imports CLIProxyAPI external_idp JSON as a Kiro OAuth connection", async () => {

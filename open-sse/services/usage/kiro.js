@@ -5,6 +5,7 @@
 import { proxyAwareFetch } from "../../utils/proxyFetch.js";
 import { resolveDefaultProfileArn } from "../../config/kiroConstants.js";
 import { U, parseResetTime } from "./shared.js";
+import { buildKiroIdentityHeaders } from "../../config/kiroIdentity.js";
 
 /**
  * Kiro (AWS CodeWhisperer) Usage
@@ -49,6 +50,7 @@ function parseKiroQuotaData(data) {
 }
 
 export async function getKiroUsage(accessToken, providerSpecificData, proxyOptions = null) {
+  const identityHeaders = buildKiroIdentityHeaders({ accessToken, providerSpecificData });
   const authMethod = providerSpecificData?.authMethod || "builder-id";
   // API-key Kiro connections authenticate the quota API the same way the chat
   // executor does: a bearer token plus a `tokentype: API_KEY` header so
@@ -83,8 +85,7 @@ export async function getKiroUsage(accessToken, providerSpecificData, proxyOptio
           headers: {
             "Authorization": `Bearer ${accessToken}`,
             "Accept": "application/json",
-            "x-amz-user-agent": "aws-sdk-js/1.0.0 KiroIDE",
-            "user-agent": "aws-sdk-js/1.0.0 KiroIDE",
+            ...identityHeaders,
             ...apiKeyHeaders,
             ...externalIdpHeaders,
           },
@@ -101,6 +102,7 @@ export async function getKiroUsage(accessToken, providerSpecificData, proxyOptio
           "Content-Type": "application/x-amz-json-1.0",
           "x-amz-target": "AmazonCodeWhispererService.GetUsageLimits",
           "Accept": "application/json",
+          ...identityHeaders,
           ...apiKeyHeaders,
           ...externalIdpHeaders,
         },
@@ -124,6 +126,7 @@ export async function getKiroUsage(accessToken, providerSpecificData, proxyOptio
           headers: {
             "Authorization": `Bearer ${accessToken}`,
             "Accept": "application/json",
+            ...identityHeaders,
             ...apiKeyHeaders,
             ...externalIdpHeaders,
           },
