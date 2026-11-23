@@ -40,7 +40,6 @@ vi.mock("@/sse/services/auth.js", () => ({
   // Limit-token helpers (custom branch): unrestricted for these tests.
   checkApiKey: async () => ({ valid: true, reason: null }),
   checkApiKeyLimits: async () => ({ ok: true, reason: null }),
-  checkApiKeyModel: async () => ({ ok: true }),
 }));
 vi.mock("@/sse/services/tokenRefresh.js", () => ({
   checkAndRefreshToken: async (_p, c) => c,

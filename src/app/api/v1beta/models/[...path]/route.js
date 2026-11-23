@@ -251,7 +251,7 @@ async function forwardGeminiNativeRequest(request, body, model, action) {
   const keyAccessDenied = await enforceKeyAccessResolved(await getKeyAccessContext(request), model, "gemini", modelId);
   if (keyAccessDenied) return keyAccessDenied;
 
-  // Limit-token: known key's expiry / token limit and allowedModels.
+  // Enforce a known key's expiry and token limit.
   const keyLimitDenied = await enforceKeyLimits(request, model);
   if (keyLimitDenied) return keyLimitDenied;
   const excludeConnectionIds = new Set();

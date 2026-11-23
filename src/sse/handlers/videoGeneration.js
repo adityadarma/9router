@@ -128,7 +128,7 @@ export async function handleVideoCreate(request, action) {
   );
   if (keyAccessDenied) return keyAccessDenied;
 
-  // Limit-token: known key's expiry / token limit and allowedModels.
+  // Enforce a known key's expiry and token limit.
   const keyLimitDenied = await enforceKeyLimits(request, bodyInfo.parsed?.model ? String(bodyInfo.parsed.model) : (provider && model ? `${provider}/${model}` : ""));
   if (keyLimitDenied) return keyLimitDenied;
 

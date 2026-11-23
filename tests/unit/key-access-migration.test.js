@@ -91,8 +91,13 @@ describe("apiKeys access columns: upgrade from the previous schema", () => {
     await db.importDb(dump);
     expect((await db.getApiKeyById("k1")).access).toEqual({ restricted: true, allow: ["Main"] });
 
-    const legacy = { ...dump, apiKeys: dump.apiKeys.map(({ access, ...rest }) => rest) };
+    const legacy = {
+      ...dump,
+      apiKeys: dump.apiKeys.map(({ access, ...rest }) => ({ ...rest, allowedModels: ["Main"] })),
+    };
     await db.importDb(legacy);
+    // Legacy allowedModels is intentionally not migrated; users reconfigure
+    // model restrictions through the current access controls.
     expect((await db.getApiKeyById("k1")).access).toEqual({ restricted: false, allow: [] });
 
     const bad = { ...dump, apiKeys: [{ ...dump.apiKeys[0], access: { restricted: "yes", allow: [] } }] };
